@@ -260,9 +260,9 @@
             },
 
             async _displayTopGenInternal() {
-                this.ui.selectionLabel.textContent = 'Displaying Top Generation';
+                this.ui.selectionLabel.textContent = 'Displaying Generation 1';
                 const query = `
-                    MATCH (p:Person) WHERE NOT (p)-[:CHILD_OF]->()
+                    MATCH (p:Person {genNumber: 1})
                     RETURN p.id AS id, trim(coalesce(p.firstName, '') + ' ' + coalesce(p.lastName, '')) AS name, coalesce(p.dob, 'Not Set') AS dob
                     ORDER BY p.id
                 `;
