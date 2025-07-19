@@ -67,27 +67,31 @@
             </header>
 
             <!-- Action Buttons -->
-            <div class="bg-white p-3 rounded-lg shadow-md mb-4 flex flex-col sm:flex-row flex-wrap gap-2 items-stretch sm:items-center">
+            <div class="bg-white p-3 rounded-lg shadow-md mb-4 flex flex-col sm:flex-row flex-wrap items-center gap-y-2">
                 <!-- Primary Actions -->
-                <div class="flex flex-wrap gap-2 p-2 justify-center">
-                    <button id="add-child-btn" class="btn btn-primary btn-disabled" disabled>Add Child</button>
-                    <button id="add-sibling-btn" class="btn btn-primary btn-disabled" disabled>Add Sibling</button>
-                    <button id="add-spouse-btn" class="btn btn-primary btn-disabled" disabled>Add Spouse</button>
+                <div class="flex flex-row flex-wrap justify-center items-center">
+                    <button id="add-child-btn" class="btn btn-primary btn-disabled mx-1" disabled>Add Child</button>
+                    <span class="text-gray-300 font-light">|</span>
+                    <button id="add-sibling-btn" class="btn btn-primary btn-disabled mx-1" disabled>Add Sibling</button>
+                    <span class="text-gray-300 font-light">|</span>
+                    <button id="add-spouse-btn" class="btn btn-primary btn-disabled mx-1" disabled>Add Spouse</button>
                 </div>
 
                 <!-- Contextual Actions -->
-                <div class="flex flex-wrap gap-2 p-2 justify-center border-t border-b sm:border-t-0 sm:border-b-0 sm:border-l sm:border-r border-gray-200">
-                    <button id="modify-btn" class="btn btn-secondary btn-disabled" disabled>Modify Person</button>
-                    <button id="view-children-btn" class="btn btn-secondary btn-disabled" disabled>View Children</button>
+                <div class="flex flex-row flex-wrap justify-center items-center w-full sm:w-auto border-t sm:border-t-0 sm:border-l border-gray-200 pt-2 sm:pt-0 sm:pl-4">
+                    <button id="modify-btn" class="btn btn-secondary btn-disabled mx-1" disabled>Modify Person</button>
+                    <span class="text-gray-300 font-light">|</span>
+                    <button id="view-children-btn" class="btn btn-secondary btn-disabled mx-1" disabled>View Children</button>
                 </div>
 
                 <!-- Spacer -->
                 <div class="flex-grow"></div>
 
                 <!-- Navigation Actions -->
-                <div class="flex flex-wrap gap-2 p-2 justify-center">
-                    <button id="back-btn" class="btn btn-secondary btn-disabled" disabled>Go Back</button>
-                    <button id="top-gen-btn" class="btn btn-secondary">Go to Top Generation</button>
+                <div class="flex flex-row flex-wrap justify-center items-center w-full sm:w-auto border-t sm:border-t-0 sm:border-l border-gray-200 pt-2 sm:pt-0 sm:pl-4">
+                    <button id="back-btn" class="btn btn-secondary btn-disabled mx-1" disabled>Go Back</button>
+                    <span class="text-gray-300 font-light">|</span>
+                    <button id="top-gen-btn" class="btn btn-secondary mx-1">Go to Top Generation</button>
                 </div>
             </div>
 
