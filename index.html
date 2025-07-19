@@ -397,11 +397,16 @@
 
             async modifyPerson() {
                 if (!this.currentPersonId) return;
-                const personData = (await this.runQuery('MATCH (p:Person {id: $id}) RETURN p', { id: this.currentPersonId }))[0];
+                const personDataResult = (await this.runQuery('MATCH (p:Person {id: $id}) RETURN p', { id: this.currentPersonId }))[0];
+                const personData = personDataResult.p.properties;
+
+                const parentsResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN collect(p.id) as parentIds', { id: this.currentPersonId });
+                personData.parents = parentsResult.length > 0 ? parentsResult[0].parentIds : [];
+
                 this.openForm({
                     type: 'modify',
                     relatedId: this.currentPersonId,
-                    initialData: personData.p.properties,
+                    initialData: personData,
                     title: 'Modify Person'
                 });
             },
@@ -478,6 +483,39 @@
                         const value = initialData[key] || '';
                         this.createFormField(this.ui.modal.form, key, label, value);
                     });
+
+                    if (type === 'modify') {
+                        const parentSectionHTML = `
+                            <div class="border-t pt-4 mt-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Parents</label>
+                                <div id="parents-list" class="space-y-2"></div>
+                                <button type="button" id="add-parent-btn" class="mt-2 text-sm text-blue-600 hover:text-blue-800">+ Add Parent</button>
+                            </div>
+                        `;
+                        this.ui.modal.form.insertAdjacentHTML('beforeend', parentSectionHTML);
+
+                        const parentsListDiv = document.getElementById('parents-list');
+                        const addParentBtn = document.getElementById('add-parent-btn');
+
+                        const addParentField = (id = '') => {
+                            const parentFieldHTML = `
+                                <div class="flex items-center gap-2">
+                                    <input type="text" value="${id}" placeholder="Enter Parent ID" class="flex-grow mt-1 block w-full rounded-md border-gray-300 shadow-sm" data-parent-id>
+                                    <button type="button" class="text-red-500 hover:text-red-700 remove-parent-btn">Remove</button>
+                                </div>
+                            `;
+                            parentsListDiv.insertAdjacentHTML('beforeend', parentFieldHTML);
+                        };
+
+                        addParentBtn.addEventListener('click', () => addParentField());
+                        parentsListDiv.addEventListener('click', (e) => {
+                            if (e.target.classList.contains('remove-parent-btn')) {
+                                e.target.closest('.flex').remove();
+                            }
+                        });
+
+                        (initialData.parents || []).forEach(id => addParentField(id));
+                    }
                 }
 
 
@@ -499,63 +537,119 @@
                         return;
                     }
 
-                    const formData = { genNumber };
+                    const formData = {};
+                    if (type !== 'modify') formData.genNumber = genNumber;
+                    
                     let newId = (type === 'modify') ? relatedId : null;
                     
                     this.ui.modal.form.querySelectorAll('[data-key]').forEach(input => {
                         formData[input.dataset.key] = input.value;
                     });
 
-                    if (type === 'child' || type === 'sibling') {
-                        const childNumber = formData.childNumber;
-                        if (!childNumber) {
-                            alert('childNumber is required to generate an ID.');
-                            return;
+                    if (type === 'modify') {
+                        const oldId = relatedId;
+                        const oldChildNumber = initialData.childNumber || '';
+                        const newChildNumber = formData.childNumber || '';
+
+                        if (newChildNumber && newChildNumber !== oldChildNumber) {
+                            const parentResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id LIMIT 1', { id: oldId });
+                            if (parentResult.length > 0) {
+                                const parentId = parentResult[0].id;
+                                newId = `${parentId}_${newChildNumber}`;
+                                
+                                const existingNode = await this.runQuery('MATCH (p:Person {id: $id}) RETURN p', { id: newId });
+                                if (existingNode.length > 0) {
+                                    alert(`Error: A person with the new generated ID '${newId}' already exists. Please choose a different childNumber.`);
+                                    return;
+                                }
+                            }
                         }
-                        let parentId = relatedId;
-                        if (type === 'sibling') {
-                            const parentResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id LIMIT 1', { id: relatedId });
-                            if (parentResult.length === 0) {
-                                alert('Could not find parent to generate ID.');
+
+                        const initialParentIds = initialData.parents || [];
+                        const newParentIds = Array.from(document.querySelectorAll('[data-parent-id]')).map(input => input.value).filter(Boolean);
+                        const parentsToAdd = newParentIds.filter(id => !initialParentIds.includes(id));
+                        const parentsToRemove = initialParentIds.filter(id => !newParentIds.includes(id));
+
+                        if (parentsToAdd.length > 0) {
+                            await this.runQuery(`MATCH (c:Person {id: $childId}), (p:Person) WHERE p.id IN $parentIds MERGE (c)-[:CHILD_OF]->(p)`, { childId: oldId, parentIds: parentsToAdd });
+                        }
+                        if (parentsToRemove.length > 0) {
+                            await this.runQuery(`MATCH (c:Person {id: $childId})-[r:CHILD_OF]->(p:Person) WHERE p.id IN $parentIds DELETE r`, { childId: oldId, parentIds: parentsToRemove });
+                        }
+                        
+                        const propsToSet = {};
+                        const propsToRemove = [];
+                        for (const key in formData) {
+                            if (formData[key] !== (initialData[key] || '')) {
+                                 if (formData[key]) {
+                                     propsToSet[key] = formData[key];
+                                 } else {
+                                     const isMandatory = mandatoryKeys.includes(key);
+                                     if (!isMandatory) {
+                                         propsToRemove.push(key);
+                                     }
+                                 }
+                            }
+                        }
+                        if (newId !== oldId) {
+                            propsToSet.id = newId;
+                        }
+
+                        let setClause = Object.keys(propsToSet).length > 0 ? "SET p += $propsToSet" : "";
+                        let removeClause = propsToRemove.length > 0 ? "REMOVE " + propsToRemove.map(p => `p.\`${p}\``).join(', ') : "";
+
+                        if (setClause || removeClause) {
+                            await this.runQuery(`MATCH (p:Person {id: $oldId}) ${setClause} ${removeClause}`, { oldId: oldId, propsToSet: propsToSet });
+                        }
+                        
+                    } else { // Logic for creating new person
+                        if (type === 'child' || type === 'sibling') {
+                            const childNumber = formData.childNumber;
+                            if (!childNumber) {
+                                alert('childNumber is required to generate an ID.');
                                 return;
                             }
-                            parentId = parentResult[0].id;
+                            let parentId = relatedId;
+                            if (type === 'sibling') {
+                                const parentResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id LIMIT 1', { id: relatedId });
+                                if (parentResult.length === 0) {
+                                    alert('Could not find parent to generate ID.');
+                                    return;
+                                }
+                                parentId = parentResult[0].id;
+                            }
+                            newId = `${parentId}_${childNumber}`;
+                        } else if (type === 'spouse') {
+                            const spouseCountResult = await this.runQuery('MATCH (p:Person {id: $id})-[:SPOUSE_OF]-() RETURN count(*) as spouseCount', { id: relatedId });
+                            const spouseIndex = (spouseCountResult[0]?.spouseCount.low || 0) + 1;
+                            newId = `${relatedId}_sp${spouseIndex}`;
                         }
-                        newId = `${parentId}_${childNumber}`;
-                    } else if (type === 'spouse') {
-                        const spouseCountResult = await this.runQuery('MATCH (p:Person {id: $id})-[:SPOUSE_OF]-() RETURN count(*) as spouseCount', { id: relatedId });
-                        const spouseIndex = (spouseCountResult[0]?.spouseCount.low || 0) + 1;
-                        newId = `${relatedId}_sp${spouseIndex}`;
-                    }
 
-                    if (!newId) {
-                        if (type !== 'modify') alert('A unique ID is required.');
-                        return;
-                    }
+                        if (!newId) {
+                            alert('A unique ID is required.');
+                            return;
+                        }
 
-                    const props = Object.fromEntries(Object.entries(formData).filter(([_, v]) => v !== ''));
-                    if (type === 'modify') {
-                        await this.runQuery('MATCH (p:Person {id: $id}) SET p = $props', { id: newId, props: { ...initialData, ...props, id: newId } });
-                    } else {
+                        const props = Object.fromEntries(Object.entries(formData).filter(([_, v]) => v !== ''));
                         await this.runQuery('CREATE (p:Person {id: $id}) SET p += $props', { id: newId, props });
-                    }
-                    
-                    if (type === 'child') {
-                        const parentIds = [relatedId];
-                        const spouseSelector = document.getElementById('spouse-selector');
-                        if (spouseSelector && spouseSelector.value) {
-                            parentIds.push(spouseSelector.value);
+                        
+                        if (type === 'child') {
+                            const parentIds = [relatedId];
+                            const spouseSelector = document.getElementById('spouse-selector');
+                            if (spouseSelector && spouseSelector.value) {
+                                parentIds.push(spouseSelector.value);
+                            }
+                            for (const parentId of parentIds) {
+                                await this.runQuery('MATCH (c:Person {id: $childId}), (p:Person {id: $parentId}) MERGE (c)-[:CHILD_OF]->(p)', { childId: newId, parentId: parentId });
+                            }
+                        } else if (type === 'sibling') {
+                             const parents = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id', { id: relatedId });
+                             for (const parent of parents) {
+                                await this.runQuery('MATCH (c:Person {id: $childId}), (p:Person {id: $parentId}) MERGE (c)-[:CHILD_OF]->(p)', { childId: newId, parentId: parent.id });
+                             }
+                        } else if (type === 'spouse') {
+                            await this.runQuery('MATCH (p1:Person {id: $p1Id}), (p2:Person {id: $p2Id}) MERGE (p1)-[:SPOUSE_OF]-(p2)', { p1Id: newId, p2Id: relatedId });
                         }
-                        for (const parentId of parentIds) {
-                            await this.runQuery('MATCH (c:Person {id: $childId}), (p:Person {id: $parentId}) MERGE (c)-[:CHILD_OF]->(p)', { childId: newId, parentId: parentId });
-                        }
-                    } else if (type === 'sibling') {
-                         const parents = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id', { id: relatedId });
-                         for (const parent of parents) {
-                            await this.runQuery('MATCH (c:Person {id: $childId}), (p:Person {id: $parentId}) MERGE (c)-[:CHILD_OF]->(p)', { childId: newId, parentId: parent.id });
-                         }
-                    } else if (type === 'spouse') {
-                        await this.runQuery('MATCH (p1:Person {id: $p1Id}), (p2:Person {id: $p2Id}) MERGE (p1)-[:SPOUSE_OF]-(p2)', { p1Id: newId, p2Id: relatedId });
                     }
 
                     alert('Operation successful!');
