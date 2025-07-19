@@ -356,11 +356,15 @@
                 if (!this.currentPersonId) return;
                 const parent = (await this.runQuery('MATCH (p:Person {id: $id}) RETURN p.genNumber as gen', { id: this.currentPersonId }))[0];
                 const parentGen = parent ? parseInt(parent.gen, 10) : 1;
+                
+                const spouses = await this.runQuery('MATCH (p:Person {id: $id})-[:SPOUSE_OF]-(s:Person) RETURN s.id as id, s.firstName as name', { id: this.currentPersonId });
+
                 this.openForm({
                     type: 'child',
                     relatedId: this.currentPersonId,
                     genNumber: parentGen + 1,
-                    title: 'Add New Child'
+                    title: 'Add New Child',
+                    context: { spouses }
                 });
             },
             
@@ -403,7 +407,7 @@
             },
 
             // --- Form Logic ---
-            async openForm({ type, relatedId, genNumber, title, initialData = {} }) {
+            async openForm({ type, relatedId, genNumber, title, initialData = {}, context = {} }) {
                 const schemaQuery = "MATCH (s:Schema {id: 'person_schema'}) RETURN s.keys as keys, s.mandatory_keys as mandatory";
                 const schemaResult = await this.runQuery(schemaQuery);
                 if (schemaResult.length === 0) {
@@ -453,6 +457,20 @@
                         const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
                         this.ui.modal.form.insertAdjacentHTML('beforeend', genField);
                     }
+                    
+                    if (type === 'child' && context.spouses && context.spouses.length > 0) {
+                        let spouseOptions = context.spouses.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join('');
+                        const spouseSelectorHTML = `
+                            <div>
+                                <label class="block text-sm font-medium">Other Parent (Spouse)*</label>
+                                <select id="spouse-selector" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                    ${spouseOptions}
+                                </select>
+                            </div>
+                        `;
+                        this.ui.modal.form.insertAdjacentHTML('beforeend', spouseSelectorHTML);
+                    }
+
                     schema.forEach(key => {
                         if (key === 'genNumber' && type !== 'modify') return;
                         const isMandatory = mandatoryKeys.includes(key);
@@ -523,7 +541,14 @@
                     }
                     
                     if (type === 'child') {
-                        await this.runQuery('MATCH (c:Person {id: $childId}), (p:Person {id: $parentId}) MERGE (c)-[:CHILD_OF]->(p)', { childId: newId, parentId: relatedId });
+                        const parentIds = [relatedId];
+                        const spouseSelector = document.getElementById('spouse-selector');
+                        if (spouseSelector && spouseSelector.value) {
+                            parentIds.push(spouseSelector.value);
+                        }
+                        for (const parentId of parentIds) {
+                            await this.runQuery('MATCH (c:Person {id: $childId}), (p:Person {id: $parentId}) MERGE (c)-[:CHILD_OF]->(p)', { childId: newId, parentId: parentId });
+                        }
                     } else if (type === 'sibling') {
                          const parents = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id', { id: relatedId });
                          for (const parent of parents) {
