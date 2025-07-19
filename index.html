@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maliyakkal Family Tree</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Neo4j JavaScript Driver -->
+    <script src="https://unpkg.com/neo4j-driver"></script>
+    <style>
+        /* Simple transition for modals and buttons */
+        .modal {
+            transition: opacity 0.25s ease;
+        }
+        .btn {
+            @apply px-4 py-2 rounded-md font-semibold text-white shadow-md transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2;
+        }
+        .btn-primary {
+            @apply bg-blue-600 hover:bg-blue-700 focus:ring-blue-500;
+        }
+        .btn-secondary {
+            @apply bg-gray-500 hover:bg-gray-600 focus:ring-gray-400;
+        }
+        .btn-disabled {
+            @apply bg-gray-300 cursor-not-allowed hover:scale-100;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+    <div id="app" class="container mx-auto p-4 max-w-4xl">
+
+        <!-- Connection Screen -->
+        <div id="connection-screen" class="flex items-center justify-center min-h-screen">
+            <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+                <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">Connect to Neo4j Database</h1>
+                <div class="space-y-4">
+                    <div>
+                        <label for="uri" class="block text-sm font-medium text-gray-700">Database URI</label>
+                        <input type="text" id="uri" value="neo4j+s://51ac777b.databases.neo4j.io" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                        <input type="password" id="password" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <button id="connect-btn" class="w-full btn btn-primary">Connect</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Application Screen (hidden by default) -->
+        <div id="main-app" class="hidden">
+            <header class="bg-white p-4 rounded-lg shadow-md mb-4">
+                <h1 class="text-3xl font-bold text-gray-800">Maliyakkal Family Tree</h1>
+                <p id="current-selection-label" class="text-gray-600 italic mt-1">Current Selection: None</p>
+            </header>
+
+            <!-- Action Buttons -->
+            <div class="bg-white p-3 rounded-lg shadow-md mb-4 flex flex-wrap gap-4 items-center">
+                <!-- Primary Actions -->
+                <div class="flex flex-wrap gap-2">
+                    <button id="add-child-btn" class="btn btn-primary btn-disabled" disabled>Add Child</button>
+                    <button id="add-sibling-btn" class="btn btn-primary btn-disabled" disabled>Add Sibling</button>
+                    <button id="add-spouse-btn" class="btn btn-primary btn-disabled" disabled>Add Spouse</button>
+                </div>
+
+                <!-- Vertical Divider -->
+                <div class="w-px h-8 bg-gray-300"></div>
+
+                <!-- Contextual Actions -->
+                <div class="flex flex-wrap gap-2">
+                    <button id="modify-btn" class="btn btn-secondary btn-disabled" disabled>Modify Person</button>
+                    <button id="view-children-btn" class="btn btn-secondary btn-disabled" disabled>View Children</button>
+                </div>
+
+                <!-- Spacer -->
+                <div class="flex-grow"></div>
+
+                <!-- Navigation Actions -->
+                <div class="flex flex-wrap gap-2">
+                    <button id="back-btn" class="btn btn-secondary btn-disabled" disabled>Go Back</button>
+                    <button id="top-gen-btn" class="btn btn-secondary">Go to Top Generation</button>
+                </div>
+            </div>
+
+            <!-- Person List -->
+            <div class="bg-white rounded-lg shadow-md overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date of Birth</th>
+                        </tr>
+                    </thead>
+                    <tbody id="person-list" class="bg-white divide-y divide-gray-200">
+                        <!-- Rows will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Modal for Forms -->
+    <div id="modal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden" style="opacity: 0;">
+        <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 id="modal-title" class="text-lg leading-6 font-medium text-gray-900">Add Person</h3>
+                <div id="modal-form" class="mt-2 px-7 py-3 space-y-4 text-left">
+                    <!-- Form fields will be inserted here by JavaScript -->
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="modal-submit" class="btn btn-primary">Submit</button>
+                    <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        const App = {
+            driver: null,
+            dbName: 'neo4j', // AuraDB default
+            currentPersonId: null,
+            viewHistory: [],
+            
+            // --- Initialization ---
+            init() {
+                this.cacheElements();
+                this.bindEvents();
+            },
+
+            cacheElements() {
+                this.ui = {
+                    connectionScreen: document.getElementById('connection-screen'),
+                    mainApp: document.getElementById('main-app'),
+                    uriInput: document.getElementById('uri'),
+                    passwordInput: document.getElementById('password'),
+                    connectBtn: document.getElementById('connect-btn'),
+                    selectionLabel: document.getElementById('current-selection-label'),
+                    personList: document.getElementById('person-list'),
+                    buttons: {
+                        addChild: document.getElementById('add-child-btn'),
+                        addSibling: document.getElementById('add-sibling-btn'),
+                        addSpouse: document.getElementById('add-spouse-btn'),
+                        modify: document.getElementById('modify-btn'),
+                        viewChildren: document.getElementById('view-children-btn'),
+                        back: document.getElementById('back-btn'),
+                        topGen: document.getElementById('top-gen-btn'),
+                    },
+                    modal: {
+                        container: document.getElementById('modal'),
+                        title: document.getElementById('modal-title'),
+                        form: document.getElementById('modal-form'),
+                        submit: document.getElementById('modal-submit'),
+                        cancel: document.getElementById('modal-cancel'),
+                    }
+                };
+            },
+
+            bindEvents() {
+                this.ui.connectBtn.addEventListener('click', () => this.connect());
+                this.ui.passwordInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') this.connect();
+                });
+                
+                // Main app buttons
+                this.ui.buttons.topGen.addEventListener('click', () => this.loadTopGeneration());
+                this.ui.buttons.back.addEventListener('click', () => this.goBack());
+                this.ui.buttons.viewChildren.addEventListener('click', () => this.viewChildren());
+
+                // Action buttons that depend on selection
+                this.ui.buttons.addChild.addEventListener('click', () => this.addChild());
+                this.ui.buttons.addSibling.addEventListener('click', () => this.addSibling());
+                this.ui.buttons.addSpouse.addEventListener('click', () => this.addSpouse());
+                this.ui.buttons.modify.addEventListener('click', () => this.modifyPerson());
+            },
+
+            // --- Connection Logic ---
+            async connect() {
+                const uri = this.ui.uriInput.value;
+                const password = this.ui.passwordInput.value;
+                const user = 'neo4j';
+
+                if (!uri || !password) {
+                    alert('Please provide both URI and password.');
+                    return;
+                }
+
+                this.ui.connectBtn.textContent = 'Connecting...';
+                this.ui.connectBtn.disabled = true;
+
+                try {
+                    this.driver = neo4j.driver(uri, neo4j.auth.basic(user, password));
+                    await this.driver.verifyConnectivity();
+                    
+                    this.ui.connectionScreen.classList.add('hidden');
+                    this.ui.mainApp.classList.remove('hidden');
+                    this.loadTopGeneration();
+
+                } catch (error) {
+                    console.error('Connection Error:', error);
+                    alert(`Connection failed: ${error.message}`);
+                } finally {
+                    this.ui.connectBtn.textContent = 'Connect';
+                    this.ui.connectBtn.disabled = false;
+                }
+            },
+
+            // --- Data Fetching & Display ---
+            async runQuery(query, params = {}) {
+                if (!this.driver) return [];
+                const session = this.driver.session({ database: this.dbName });
+                try {
+                    const result = await session.run(query, params);
+                    return result.records.map(record => record.toObject());
+                } catch (error) {
+                    console.error('Query Error:', error);
+                    alert(`A database error occurred: ${error.message}`);
+                    return [];
+                } finally {
+                    await session.close();
+                }
+            },
+
+            async loadTopGeneration(addToHistory = false) {
+                if (addToHistory) {
+                    this.viewHistory.push({ mode: 'top' });
+                } else {
+                    this.viewHistory = [];
+                }
+                this.ui.buttons.back.disabled = this.viewHistory.length === 0;
+
+                const query = `
+                    MATCH (p:Person) WHERE NOT (p)-[:CHILD_OF]->()
+                    RETURN p.id AS id, coalesce(p.firstName, 'N/A') AS name, coalesce(p.dob, 'Not Set') AS dob
+                    ORDER BY p.id
+                `;
+                const people = await this.runQuery(query);
+                this.renderPersonList(people, 'Displaying Top Generation');
+            },
+
+            async viewChildren(addToHistory = true) {
+                if (!this.currentPersonId) return;
+                
+                if (addToHistory) {
+                    this.viewHistory.push({ mode: 'children', id: this.currentPersonId });
+                }
+                this.ui.buttons.back.disabled = this.viewHistory.length === 0;
+
+                const query = `
+                    MATCH (:Person {id: $parentId})<-[:CHILD_OF]-(child:Person)
+                    RETURN child.id AS id, coalesce(child.firstName, 'N/A') AS name, coalesce(child.dob, 'Not Set') AS dob
+                    ORDER BY child.id
+                `;
+                const children = await this.runQuery(query, { parentId: this.currentPersonId });
+                
+                const parentName = this.ui.selectionLabel.textContent.split('ID:')[0].replace('Selected:', '').trim();
+                this.renderPersonList(children, `Children of: ${parentName}`);
+            },
+
+            renderPersonList(people, label) {
+                this.ui.personList.innerHTML = '';
+                this.ui.selectionLabel.textContent = label;
+                this.resetButtons();
+
+                if (people.length === 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td colspan="3" class="px-6 py-4 text-center text-gray-500">No people found.</td>`;
+                    this.ui.personList.appendChild(row);
+                    return;
+                }
+
+                people.forEach(person => {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-gray-50 cursor-pointer';
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${person.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${person.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${person.dob}</td>
+                    `;
+                    row.addEventListener('click', () => {
+                        // Handle selection styling
+                        document.querySelectorAll('#person-list tr').forEach(r => r.classList.remove('bg-blue-100'));
+                        row.classList.add('bg-blue-100');
+                        this.onPersonSelect(person.id, person.name);
+                    });
+                    row.addEventListener('dblclick', () => this.viewChildren());
+                    this.ui.personList.appendChild(row);
+                });
+            },
+
+            // --- UI State & Event Handlers ---
+            onPersonSelect(id, name) {
+                this.currentPersonId = id;
+                this.ui.selectionLabel.textContent = `Selected: ${name} (ID: ${id})`;
+                Object.values(this.ui.buttons).forEach(btn => {
+                    if (btn.id !== 'back-btn' && btn.id !== 'top-gen-btn') {
+                        btn.disabled = false;
+                        btn.classList.remove('btn-disabled');
+                    }
+                });
+            },
+
+            resetButtons() {
+                this.currentPersonId = null;
+                Object.values(this.ui.buttons).forEach(btn => {
+                     if (btn.id !== 'back-btn' && btn.id !== 'top-gen-btn') {
+                        btn.disabled = true;
+                        btn.classList.add('btn-disabled');
+                    }
+                });
+            },
+            
+            async goBack() {
+                if (this.viewHistory.length === 0) return;
+                const previousView = this.viewHistory.pop();
+                this.ui.buttons.back.disabled = this.viewHistory.length === 0;
+
+                if (previousView.mode === 'top') {
+                    await this.loadTopGeneration(false);
+                } else {
+                    // To go back to a children view, we need the parent's parent
+                    const grandParentQuery = `
+                        MATCH (:Person {id: $childId})-[:CHILD_OF]->(parent:Person)-[:CHILD_OF]->(grandParent:Person)
+                        RETURN grandParent.id as id
+                    `;
+                    const result = await this.runQuery(grandParentQuery, { childId: previousView.id });
+                    if (result.length > 0) {
+                        await this.viewChildren(false); // This is simplified, needs better context
+                    } else {
+                        await this.loadTopGeneration(false);
+                    }
+                }
+            },
+
+            // --- Actions (Add, Modify, etc.) ---
+            async addChild() {
+                if (!this.currentPersonId) return;
+                const parent = (await this.runQuery('MATCH (p:Person {id: $id}) RETURN p.genNumber as gen', { id: this.currentPersonId }))[0];
+                const parentGen = parent ? parseInt(parent.gen, 10) : 1;
+                this.openForm({
+                    type: 'child',
+                    relatedId: this.currentPersonId,
+                    genNumber: parentGen + 1,
+                    title: 'Add New Child'
+                });
+            },
+            
+            async addSibling() {
+                if (!this.currentPersonId) return;
+                const sibling = (await this.runQuery('MATCH (p:Person {id: $id}) RETURN p.genNumber as gen', { id: this.currentPersonId }))[0];
+                if (!sibling) {
+                    alert("Cannot add sibling to a person with no generation number.");
+                    return;
+                }
+                this.openForm({
+                    type: 'sibling',
+                    relatedId: this.currentPersonId,
+                    genNumber: parseInt(sibling.gen, 10),
+                    title: 'Add New Sibling'
+                });
+            },
+            
+            async addSpouse() {
+                if (!this.currentPersonId) return;
+                const person = (await this.runQuery('MATCH (p:Person {id: $id}) RETURN p.genNumber as gen', { id: this.currentPersonId }))[0];
+                const personGen = person ? parseInt(person.gen, 10) : 1;
+                this.openForm({
+                    type: 'spouse',
+                    relatedId: this.currentPersonId,
+                    genNumber: personGen,
+                    title: 'Add New Spouse'
+                });
+            },
+
+            async modifyPerson() {
+                if (!this.currentPersonId) return;
+                const personData = (await this.runQuery('MATCH (p:Person {id: $id}) RETURN p', { id: this.currentPersonId }))[0];
+                this.openForm({
+                    type: 'modify',
+                    relatedId: this.currentPersonId,
+                    initialData: personData.p.properties,
+                    title: 'Modify Person'
+                });
+            },
+
+            // --- Form Logic ---
+            async openForm({ type, relatedId, genNumber, title, initialData = {} }) {
+                const schemaQuery = "MATCH (s:Schema {id: 'person_schema'}) RETURN s.keys as keys, s.mandatory_keys as mandatory";
+                const schemaResult = await this.runQuery(schemaQuery);
+                if (schemaResult.length === 0) {
+                    alert("Schema not found in database!");
+                    return;
+                }
+                const schema = schemaResult[0].keys;
+                const mandatoryKeys = schemaResult[0].mandatory || [];
+
+                this.ui.modal.title.textContent = title;
+                this.ui.modal.form.innerHTML = ''; // Clear previous form
+
+                // Build form fields
+                if (type !== 'modify') {
+                    const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
+                    this.ui.modal.form.insertAdjacentHTML('beforeend', genField);
+                }
+
+                schema.forEach(key => {
+                    if (key === 'genNumber' && type !== 'modify') return; // Don't duplicate
+                    const isMandatory = mandatoryKeys.includes(key);
+                    const label = `${key}${isMandatory ? '*' : ''}`;
+                    const value = initialData[key] || '';
+                    const fieldHTML = `
+                        <div>
+                            <label class="block text-sm font-medium">${label}</label>
+                            <input type="text" data-key="${key}" value="${value}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                    `;
+                    this.ui.modal.form.insertAdjacentHTML('beforeend', fieldHTML);
+                });
+
+                // Show modal
+                this.ui.modal.container.classList.remove('hidden');
+                setTimeout(() => this.ui.modal.container.style.opacity = 1, 10);
+
+                // Handle submission
+                const submitHandler = async () => {
+                    const formData = { genNumber };
+                    let newId = (type === 'modify') ? relatedId : null;
+                    
+                    this.ui.modal.form.querySelectorAll('input[data-key]').forEach(input => {
+                        formData[input.dataset.key] = input.value;
+                    });
+
+                    // Auto-generate ID if needed
+                    if (type === 'child' || type === 'sibling') {
+                        const childNumber = formData.childNumber;
+                        if (!childNumber) {
+                            alert('childNumber is required to generate an ID.');
+                            return;
+                        }
+                        let parentId = relatedId;
+                        if (type === 'sibling') {
+                            const parentResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id LIMIT 1', { id: relatedId });
+                            if (parentResult.length === 0) {
+                                alert('Could not find parent to generate ID.');
+                                return;
+                            }
+                            parentId = parentResult[0].id;
+                        }
+                        newId = `${parentId}_${childNumber}`;
+                    } else if (type === 'spouse') {
+                        newId = prompt("Enter a unique ID for the new spouse:");
+                    }
+
+                    if (!newId) {
+                        if (type !== 'modify') alert('A unique ID is required.');
+                        return;
+                    }
+
+                    // --- Database Write Operations ---
+                    const props = Object.fromEntries(Object.entries(formData).filter(([_, v]) => v !== ''));
+                    if (type === 'modify') {
+                        await this.runQuery('MATCH (p:Person {id: $id}) SET p = $props', { id: newId, props: { ...initialData, ...props, id: newId } });
+                    } else {
+                        await this.runQuery('CREATE (p:Person {id: $id}) SET p += $props', { id: newId, props });
+                    }
+                    
+                    // Link relationships
+                    if (type === 'child') {
+                        await this.runQuery('MATCH (c:Person {id: $childId}), (p:Person {id: $parentId}) MERGE (c)-[:CHILD_OF]->(p)', { childId: newId, parentId: relatedId });
+                    } else if (type === 'sibling') {
+                         const parents = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id', { id: relatedId });
+                         for (const parent of parents) {
+                            await this.runQuery('MATCH (c:Person {id: $childId}), (p:Person {id: $parentId}) MERGE (c)-[:CHILD_OF]->(p)', { childId: newId, parentId: parent.id });
+                         }
+                    } else if (type === 'spouse') {
+                        await this.runQuery('MATCH (p1:Person {id: $p1Id}), (p2:Person {id: $p2Id}) MERGE (p1)-[:SPOUSE_OF]-(p2)', { p1Id: newId, p2Id: relatedId });
+                    }
+
+                    alert('Operation successful!');
+                    closeModal();
+                    this.refreshCurrentView();
+                };
+
+                const closeModal = () => {
+                    this.ui.modal.container.style.opacity = 0;
+                    setTimeout(() => this.ui.modal.container.classList.add('hidden'), 250);
+                    this.ui.modal.submit.removeEventListener('click', submitHandler);
+                    this.ui.modal.cancel.removeEventListener('click', closeModal);
+                };
+
+                this.ui.modal.submit.addEventListener('click', submitHandler);
+                this.ui.modal.cancel.addEventListener('click', closeModal);
+            },
+            
+            async refreshCurrentView() {
+                const currentView = this.viewHistory[this.viewHistory.length - 1] || { mode: 'top' };
+                if (currentView.mode === 'children') {
+                    await this.viewChildren(false);
+                } else {
+                    await this.loadTopGeneration(false);
+                }
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => App.init());
+    </script>
+</body>
+</html>
+
