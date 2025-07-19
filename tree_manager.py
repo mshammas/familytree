@@ -8,7 +8,6 @@ import os
 import getpass
 
 # --- Configuration ---
-URI = "bolt://localhost:7687"
 # Properties that are managed by the script and not directly editable by the user.
 MANAGED_PROPERTIES = ['id', 'created_at']
 # Add 'lastName' to the default keys
@@ -27,14 +26,12 @@ class FamilyTreeManager:
 
     def _ensure_schema_node_exists(self):
         """
-        Ensures a :Schema node exists and has the required properties.
-        This will set default values if the node or its properties are missing,
-        but will NOT overwrite existing user-configured lists.
+        Ensures a :Schema node exists. It only sets default values upon creation.
+        It will NOT overwrite existing schema settings on subsequent runs.
         """
         query = """
         MERGE (s:Schema {id: "person_schema"})
         ON CREATE SET s.keys = $default_keys, s.mandatory_keys = $default_mandatory_keys
-        ON MATCH SET s.keys = coalesce(s.keys, $default_keys), s.mandatory_keys = coalesce(s.mandatory_keys, $default_mandatory_keys)
         """
         self.run_query(query, default_keys=DEFAULT_KEYS, default_mandatory_keys=DEFAULT_MANDATORY_KEYS)
 
@@ -334,35 +331,43 @@ def config_menu(tree):
 # --- Main Startup Block ---
 
 def connect_and_select_db():
-    """Handles the initial connection and DB selection."""
+    """Handles the initial connection and DB selection for both local and AuraDB."""
     clear_screen()
     print("--- Neo4j Database Connection ---")
+    uri = get_input("Enter Neo4j URI (e.g., neo4j+s://... or bolt://localhost:7687)")
     password = getpass.getpass("Enter Neo4j Password: ")
     driver = None
     try:
-        driver = GraphDatabase.driver(URI, auth=("neo4j", password))
+        driver = GraphDatabase.driver(uri, auth=("neo4j", password))
         driver.verify_connectivity()
-        records, _, _ = driver.execute_query("SHOW DATABASES")
-        db_names = [rec["name"] for rec in records if rec["name"] not in ["system", "neo4j"]]
         
-        if not db_names:
-            print("\n❌ No user-created databases found. Please create a database in Neo4j Desktop first.")
-            return None, None
+        # Check if it's an AuraDB instance
+        if ".databases.neo4j.io" in uri:
+            print("\n✅ AuraDB connection successful.")
+            return driver, "neo4j" # Aura's default DB is 'neo4j'
+        else:
+            # It's a local instance, so list databases
+            records, _, _ = driver.execute_query("SHOW DATABASES")
+            db_names = [rec["name"] for rec in records if rec["name"] not in ["system", "neo4j"]]
+            
+            if not db_names:
+                print("\n❌ No user-created databases found. Please create one in Neo4j Desktop first.")
+                return None, None
 
-        print("\nAvailable Databases:")
-        for i, name in enumerate(db_names):
-            print(f"  {i + 1}. {name}")
-        
-        while True:
-            choice = get_input("\nSelect a database (number): ")
-            try:
-                index = int(choice) - 1
-                if 0 <= index < len(db_names):
-                    return driver, db_names[index]
-                else:
-                    print("❌ Invalid number. Please try again.")
-            except ValueError:
-                print("❌ Please enter a number.")
+            print("\nAvailable Databases:")
+            for i, name in enumerate(db_names):
+                print(f"  {i + 1}. {name}")
+            
+            while True:
+                choice = get_input("\nSelect a database (number): ")
+                try:
+                    index = int(choice) - 1
+                    if 0 <= index < len(db_names):
+                        return driver, db_names[index]
+                    else:
+                        print("❌ Invalid number. Please try again.")
+                except ValueError:
+                    print("❌ Please enter a number.")
 
     except exceptions.AuthError:
         print("\n❌ Authentication failed. Please check your password and try again.")
