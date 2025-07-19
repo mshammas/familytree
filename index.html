@@ -230,7 +230,9 @@
 
                 const query = `
                     MATCH (p:Person) WHERE NOT (p)-[:CHILD_OF]->()
-                    RETURN p.id AS id, coalesce(p.firstName, 'N/A') AS name, coalesce(p.dob, 'Not Set') AS dob
+                    RETURN p.id AS id, 
+                           trim(coalesce(p.firstName, '') + ' ' + coalesce(p.lastName, '')) AS name, 
+                           coalesce(p.dob, 'Not Set') AS dob
                     ORDER BY p.id
                 `;
                 const people = await this.runQuery(query);
@@ -247,7 +249,9 @@
 
                 const query = `
                     MATCH (:Person {id: $parentId})<-[:CHILD_OF]-(child:Person)
-                    RETURN child.id AS id, coalesce(child.firstName, 'N/A') AS name, coalesce(child.dob, 'Not Set') AS dob
+                    RETURN child.id AS id, 
+                           trim(coalesce(child.firstName, '') + ' ' + coalesce(child.lastName, '')) AS name, 
+                           coalesce(child.dob, 'Not Set') AS dob
                     ORDER BY child.id
                 `;
                 const children = await this.runQuery(query, { parentId: this.currentPersonId });
