@@ -1,4 +1,4 @@
-i<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -416,7 +416,6 @@ i<!DOCTYPE html>
                 this.ui.modal.title.textContent = title;
                 this.ui.modal.form.innerHTML = ''; // Clear previous form
                 
-                // --- Special form logic for Spouse ---
                 if (type === 'spouse') {
                     this.ui.modal.form.innerHTML = `
                         <div class="flex items-center">
@@ -436,7 +435,7 @@ i<!DOCTYPE html>
                     newSpouseForm.insertAdjacentHTML('beforeend', genField);
 
                     schema.forEach(key => {
-                        if (key === 'genNumber' || key === 'childNumber') return; // Exclude irrelevant fields
+                        if (key === 'genNumber' || key === 'childNumber') return;
                         const isMandatory = mandatoryKeys.includes(key);
                         const label = `${key}${isMandatory ? '*' : ''}`;
                         const value = initialData[key] || '';
@@ -449,7 +448,7 @@ i<!DOCTYPE html>
                         document.getElementById('link-spouse-form').classList.toggle('hidden', !e.target.checked);
                     });
 
-                } else { // For all other types (child, sibling, modify)
+                } else {
                     if (type !== 'modify') {
                         const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
                         this.ui.modal.form.insertAdjacentHTML('beforeend', genField);
@@ -468,7 +467,6 @@ i<!DOCTYPE html>
                 setTimeout(() => this.ui.modal.container.style.opacity = 1, 10);
 
                 const submitHandler = async () => {
-                    // --- Handle linking an existing spouse ---
                     const isExistingSpouse = document.getElementById('existing-spouse-checkbox')?.checked;
                     if (isExistingSpouse) {
                         const existingSpouseId = document.getElementById('existing-spouse-id').value;
@@ -483,7 +481,6 @@ i<!DOCTYPE html>
                         return;
                     }
 
-                    // --- Handle creating new person ---
                     const formData = { genNumber };
                     let newId = (type === 'modify') ? relatedId : null;
                     
@@ -508,7 +505,9 @@ i<!DOCTYPE html>
                         }
                         newId = `${parentId}_${childNumber}`;
                     } else if (type === 'spouse') {
-                        newId = prompt("Enter a unique ID for the new spouse:");
+                        const spouseCountResult = await this.runQuery('MATCH (p:Person {id: $id})-[:SPOUSE_OF]-() RETURN count(*) as spouseCount', { id: relatedId });
+                        const spouseIndex = (spouseCountResult[0]?.spouseCount.low || 0) + 1;
+                        newId = `${relatedId}_sp${spouseIndex}`;
                     }
 
                     if (!newId) {
