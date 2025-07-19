@@ -334,8 +334,10 @@ def connect_and_select_db():
     """Handles the initial connection and DB selection for both local and AuraDB."""
     clear_screen()
     print("--- Neo4j Database Connection ---")
-    uri = get_input("Enter Neo4j URI (e.g., neo4j+s://... or bolt://localhost:7687)")
-    password = getpass.getpass("Enter Neo4j Password: ")
+    #uri = get_input("Enter Neo4j URI (e.g., neo4j+s://... or bolt://localhost:7687)")
+    uri = "neo4j+s://51ac777b.databases.neo4j.io"
+    #password = getpass.getpass("Enter Neo4j Password: ")
+    password = "Mymxj76bqL-RFJmNWTEqprHNbeSZtTAqVFLavbY_JCw"
     driver = None
     try:
         driver = GraphDatabase.driver(uri, auth=("neo4j", password))
