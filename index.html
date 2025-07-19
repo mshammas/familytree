@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+i<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -415,50 +415,75 @@
 
                 this.ui.modal.title.textContent = title;
                 this.ui.modal.form.innerHTML = ''; // Clear previous form
-
-                if (type !== 'modify') {
+                
+                // --- Special form logic for Spouse ---
+                if (type === 'spouse') {
+                    this.ui.modal.form.innerHTML = `
+                        <div class="flex items-center">
+                            <input id="existing-spouse-checkbox" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                            <label for="existing-spouse-checkbox" class="ml-2 block text-sm text-gray-900">Is spouse an existing person?</label>
+                        </div>
+                        <div id="link-spouse-form" class="hidden space-y-2 pt-2">
+                             <p class="text-xs text-gray-500">If the person doesn't exist yet, please add them to the tree first, then link them here.</p>
+                             <input type="text" id="existing-spouse-id" placeholder="Enter existing person's ID" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div id="new-spouse-form" class="space-y-4"></div>
+                    `;
+                    
+                    const newSpouseForm = this.ui.modal.form.querySelector('#new-spouse-form');
+                    
                     const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
-                    this.ui.modal.form.insertAdjacentHTML('beforeend', genField);
+                    newSpouseForm.insertAdjacentHTML('beforeend', genField);
+
+                    schema.forEach(key => {
+                        if (key === 'genNumber' || key === 'childNumber') return; // Exclude irrelevant fields
+                        const isMandatory = mandatoryKeys.includes(key);
+                        const label = `${key}${isMandatory ? '*' : ''}`;
+                        const value = initialData[key] || '';
+                        this.createFormField(newSpouseForm, key, label, value);
+                    });
+
+                    const checkbox = this.ui.modal.form.querySelector('#existing-spouse-checkbox');
+                    checkbox.addEventListener('change', (e) => {
+                        document.getElementById('new-spouse-form').classList.toggle('hidden', e.target.checked);
+                        document.getElementById('link-spouse-form').classList.toggle('hidden', !e.target.checked);
+                    });
+
+                } else { // For all other types (child, sibling, modify)
+                    if (type !== 'modify') {
+                        const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
+                        this.ui.modal.form.insertAdjacentHTML('beforeend', genField);
+                    }
+                    schema.forEach(key => {
+                        if (key === 'genNumber' && type !== 'modify') return;
+                        const isMandatory = mandatoryKeys.includes(key);
+                        const label = `${key}${isMandatory ? '*' : ''}`;
+                        const value = initialData[key] || '';
+                        this.createFormField(this.ui.modal.form, key, label, value);
+                    });
                 }
 
-                schema.forEach(key => {
-                    if (key === 'genNumber' && type !== 'modify') return;
-                    const isMandatory = mandatoryKeys.includes(key);
-                    const label = `${key}${isMandatory ? '*' : ''}`;
-                    const value = initialData[key] || '';
-                    let fieldHTML = '';
-
-                    // Conditional field generation
-                    if (key === 'dob' || key === 'dod') {
-                        fieldHTML = `
-                            <div>
-                                <label class="block text-sm font-medium">${label}</label>
-                                <input type="date" data-key="${key}" value="${value}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            </div>`;
-                    } else if (key === 'gender') {
-                        fieldHTML = `
-                            <div>
-                                <label class="block text-sm font-medium">${label}</label>
-                                <select data-key="${key}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                    <option value="" ${value === '' ? 'selected' : ''}></option>
-                                    <option value="M" ${value === 'M' ? 'selected' : ''}>M</option>
-                                    <option value="F" ${value === 'F' ? 'selected' : ''}>F</option>
-                                </select>
-                            </div>`;
-                    } else {
-                        fieldHTML = `
-                            <div>
-                                <label class="block text-sm font-medium">${label}</label>
-                                <input type="text" data-key="${key}" value="${value}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            </div>`;
-                    }
-                    this.ui.modal.form.insertAdjacentHTML('beforeend', fieldHTML);
-                });
 
                 this.ui.modal.container.classList.remove('hidden');
                 setTimeout(() => this.ui.modal.container.style.opacity = 1, 10);
 
                 const submitHandler = async () => {
+                    // --- Handle linking an existing spouse ---
+                    const isExistingSpouse = document.getElementById('existing-spouse-checkbox')?.checked;
+                    if (isExistingSpouse) {
+                        const existingSpouseId = document.getElementById('existing-spouse-id').value;
+                        if (!existingSpouseId) {
+                            alert('Please enter the ID of the existing spouse.');
+                            return;
+                        }
+                        await this.runQuery('MATCH (p1:Person {id: $p1Id}), (p2:Person {id: $p2Id}) MERGE (p1)-[:SPOUSE_OF]-(p2)', { p1Id: relatedId, p2Id: existingSpouseId });
+                        alert('Spouses linked successfully!');
+                        closeModal();
+                        this.refreshCurrentView();
+                        return;
+                    }
+
+                    // --- Handle creating new person ---
                     const formData = { genNumber };
                     let newId = (type === 'modify') ? relatedId : null;
                     
@@ -523,6 +548,34 @@
 
                 this.ui.modal.submit.addEventListener('click', submitHandler);
                 this.ui.modal.cancel.addEventListener('click', closeModal);
+            },
+            
+            createFormField(container, key, label, value) {
+                let fieldHTML = '';
+                if (key === 'dob' || key === 'dod') {
+                    fieldHTML = `
+                        <div>
+                            <label class="block text-sm font-medium">${label}</label>
+                            <input type="date" data-key="${key}" value="${value}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>`;
+                } else if (key === 'gender') {
+                    fieldHTML = `
+                        <div>
+                            <label class="block text-sm font-medium">${label}</label>
+                            <select data-key="${key}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="" ${value === '' ? 'selected' : ''}></option>
+                                <option value="M" ${value === 'M' ? 'selected' : ''}>M</option>
+                                <option value="F" ${value === 'F' ? 'selected' : ''}>F</option>
+                            </select>
+                        </div>`;
+                } else {
+                    fieldHTML = `
+                        <div>
+                            <label class="block text-sm font-medium">${label}</label>
+                            <input type="text" data-key="${key}" value="${value}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>`;
+                }
+                container.insertAdjacentHTML('beforeend', fieldHTML);
             },
             
             async refreshCurrentView() {
