@@ -606,8 +606,8 @@
 
                     if (type === 'modify') {
                         const oldId = relatedId;
-                        const oldChildNumber = initialData.childNumber || '';
-                        const newChildNumber = formData.childNumber || '';
+                        const oldChildNumber = initialData.childNumber;
+                        const newChildNumber = formData.childNumber;
 
                         if (newChildNumber && newChildNumber !== oldChildNumber) {
                             const parentResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id LIMIT 1', { id: oldId });
@@ -639,7 +639,7 @@
                         const propsToRemove = [];
                         for (const key in formData) {
                             if (formData[key] !== (initialData[key] || '')) {
-                                 if (formData[key]) {
+                                 if (formData[key] || formData[key] === 0) {
                                      propsToSet[key] = formData[key];
                                  } else {
                                      const isMandatory = mandatoryKeys.includes(key);
