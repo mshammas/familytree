@@ -261,10 +261,10 @@
 
             async _displayTopGenInternal() {
                 this.ui.selectionLabel.textContent = 'Displaying Top Generation';
-                // FIXED QUERY: Rely on genNumber = 1 as the source of truth for the top generation.
+                // FIXED QUERY: Robustly finds top generation members by casting genNumber to integer.
                 const query = `
                     MATCH (p:Person) 
-                    WHERE p.genNumber = 1
+                    WHERE toInteger(p.genNumber) = 1
                     RETURN p.id AS id, trim(coalesce(p.firstName, '') + ' ' + coalesce(p.lastName, '')) AS name, coalesce(p.dob, 'Not Set') AS dob
                     ORDER BY p.id
                 `;
@@ -542,10 +542,14 @@
                     const formData = {};
                     let newId = (type === 'modify') ? relatedId : null;
                     
-                    this.ui.modal.form.querySelectorAll('[data-key], input:disabled').forEach(input => {
-                        if (input.dataset.key || input.value) {
-                            const key = input.dataset.key || 'genNumber';
-                             formData[key] = input.value;
+                    this.ui.modal.form.querySelectorAll('[data-key], input:disabled[value]').forEach(input => {
+                        const key = input.dataset.key || 'genNumber';
+                        let value = input.value;
+
+                        if ((key === 'genNumber' || key === 'childNumber') && value) {
+                            formData[key] = parseInt(value, 10);
+                        } else {
+                            formData[key] = value;
                         }
                     });
 
