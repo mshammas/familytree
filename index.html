@@ -622,17 +622,23 @@
                                 }
                             }
                         }
+                        
+                        const newParentIds = Array.from(document.querySelectorAll('[data-parent-id]'))
+                            .map(input => input.value.trim())
+                            .filter(Boolean);
+                        const uniqueParentIds = [...new Set(newParentIds)];
 
-                        const initialParentIds = initialData.parents || [];
-                        const newParentIds = Array.from(document.querySelectorAll('[data-parent-id]')).map(input => input.value).filter(Boolean);
-                        const parentsToAdd = newParentIds.filter(id => !initialParentIds.includes(id));
-                        const parentsToRemove = initialParentIds.filter(id => !newParentIds.includes(id));
+                        // Delete all old parent relationships first
+                        await this.runQuery(`MATCH (c:Person {id: $childId})-[r:CHILD_OF]->() DELETE r`, { childId: oldId });
 
-                        if (parentsToAdd.length > 0) {
-                            await this.runQuery(`MATCH (c:Person {id: $childId}), (p:Person) WHERE p.id IN $parentIds MERGE (c)-[:CHILD_OF]->(p)`, { childId: oldId, parentIds: parentsToAdd });
-                        }
-                        if (parentsToRemove.length > 0) {
-                            await this.runQuery(`MATCH (c:Person {id: $childId})-[r:CHILD_OF]->(p:Person) WHERE p.id IN $parentIds DELETE r`, { childId: oldId, parentIds: parentsToRemove });
+                        // Create new ones from the unique list
+                        if (uniqueParentIds.length > 0) {
+                            await this.runQuery(`
+                                MATCH (c:Person {id: $childId})
+                                UNWIND $parentIds as parentId
+                                MATCH (p:Person {id: parentId})
+                                MERGE (c)-[:CHILD_OF]->(p)
+                            `, { childId: oldId, parentIds: uniqueParentIds });
                         }
                         
                         const propsToSet = {};
