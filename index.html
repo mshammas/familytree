@@ -261,10 +261,17 @@
 
             async _displayTopGenInternal() {
                 this.ui.selectionLabel.textContent = 'Displaying Top Generation';
+                // FIXED QUERY: Robustly finds top generation members.
                 const query = `
                     MATCH (p:Person) 
                     WHERE toInteger(p.genNumber) = 1 OR (p.genNumber IS NULL AND NOT (p)-[:CHILD_OF]->())
-                    RETURN p.id AS id, trim(coalesce(p.firstName, '') + ' ' + coalesce(p.lastName, '')) AS name, coalesce(p.dob, 'Not Set') AS dob
+                    WITH p
+                    OPTIONAL MATCH (p)-[:SPOUSE_OF]-(spouse:Person)
+                    WHERE toInteger(spouse.genNumber) = 1 OR (spouse.genNumber IS NULL AND NOT (spouse)-[:CHILD_OF]->())
+                    RETURN p.id AS id, 
+                           trim(coalesce(p.firstName, '') + ' ' + coalesce(p.lastName, '')) AS name, 
+                           coalesce(p.dob, 'Not Set') AS dob,
+                           CASE WHEN spouse IS NOT NULL AND id(p) > id(spouse) THEN '(Spouse of ' + spouse.firstName + ')' ELSE '' END as indicator
                     ORDER BY p.id
                 `;
                 const people = await this.runQuery(query);
@@ -277,12 +284,21 @@
                 this.ui.selectionLabel.textContent = `Children of: ${parentName}`;
                 
                 const query = `
-                    MATCH (:Person {id: $parentId})<-[:CHILD_OF]-(child:Person)
-                    RETURN child.id AS id, trim(coalesce(child.firstName, '') + ' ' + coalesce(child.lastName, '')) AS name, coalesce(child.dob, 'Not Set') AS dob
-                    ORDER BY child.id
+                    CALL {
+                        MATCH (parent:Person {id: $parentId})<-[:CHILD_OF]-(child:Person)
+                        RETURN child AS person, '' AS indicator, child.id AS sortKey
+                        UNION
+                        MATCH (parent:Person {id: $parentId})<-[:CHILD_OF]-(child:Person)-[:SPOUSE_OF]-(spouse:Person)
+                        RETURN spouse AS person, '(Spouse of ' + child.firstName + ')' AS indicator, child.id AS sortKey
+                    }
+                    RETURN person.id AS id,
+                           trim(coalesce(person.firstName, '') + ' ' + coalesce(person.lastName, '')) AS name,
+                           coalesce(person.dob, 'Not Set') AS dob,
+                           indicator
+                    ORDER BY sortKey, person.id
                 `;
-                const children = await this.runQuery(query, { parentId });
-                this.renderPersonList(children);
+                const childrenAndSpouses = await this.runQuery(query, { parentId });
+                this.renderPersonList(childrenAndSpouses);
             },
 
             renderPersonList(people) {
@@ -297,9 +313,12 @@
                     people.forEach(person => {
                         const row = document.createElement('tr');
                         row.className = 'block sm:table-row border-b sm:border-none mb-2 sm:mb-0 cursor-pointer hover:bg-gray-50';
+                        
+                        const indicatorHTML = person.indicator ? `<span class="text-xs text-gray-400 italic ml-2">${person.indicator}</span>` : '';
+
                         row.innerHTML = `
                             <td data-label="ID:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-900">${person.id}</td>
-                            <td data-label="Name:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">${person.name}</td>
+                            <td data-label="Name:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">${person.name} ${indicatorHTML}</td>
                             <td data-label="DOB:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">${person.dob}</td>
                         `;
                         row.addEventListener('click', () => {
@@ -312,8 +331,6 @@
                     });
                 }
 
-                // FIXED: If viewing children, enable Add Child/Spouse for the parent,
-                // regardless of whether there are children to display.
                 if (this.viewMode === 'children') {
                     this.currentPersonId = this.viewContextId; // Set active person to the parent
                     this.ui.buttons.addChild.disabled = false;
