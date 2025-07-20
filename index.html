@@ -261,17 +261,22 @@
 
             async _displayTopGenInternal() {
                 this.ui.selectionLabel.textContent = 'Displaying Top Generation';
-                // FIXED QUERY: Robustly finds top generation members.
+                // FIXED QUERY: Aggregates spouses to prevent duplicates.
                 const query = `
                     MATCH (p:Person) 
                     WHERE toInteger(p.genNumber) = 1 OR (p.genNumber IS NULL AND NOT (p)-[:CHILD_OF]->())
                     WITH p
-                    OPTIONAL MATCH (p)-[:SPOUSE_OF]-(spouse:Person)
-                    WHERE toInteger(spouse.genNumber) = 1 OR (spouse.genNumber IS NULL AND NOT (spouse)-[:CHILD_OF]->())
+                    OPTIONAL MATCH (p)-[:SPOUSE_OF]-(s:Person)
+                    WHERE toInteger(s.genNumber) = 1 OR (s.genNumber IS NULL AND NOT (s)-[:CHILD_OF]->())
+                    WITH p, collect(s) as spouses
                     RETURN p.id AS id, 
                            trim(coalesce(p.firstName, '') + ' ' + coalesce(p.lastName, '')) AS name, 
                            coalesce(p.dob, 'Not Set') AS dob,
-                           CASE WHEN spouse IS NOT NULL AND id(p) > id(spouse) THEN '(Spouse of ' + spouse.firstName + ')' ELSE '' END as indicator
+                           CASE 
+                             WHEN size(spouses) > 0 AND size([sp IN spouses WHERE id(p) > id(sp) | sp]) > 0 
+                             THEN '(Spouse of ' + [sp IN spouses WHERE id(p) > id(sp) | sp][0].firstName + ')'
+                             ELSE '' 
+                           END as indicator
                     ORDER BY p.id
                 `;
                 const people = await this.runQuery(query);
