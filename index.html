@@ -261,21 +261,22 @@
 
             async _displayTopGenInternal() {
                 this.ui.selectionLabel.textContent = 'Displaying Top Generation';
+                // FIXED QUERY: Robustly finds and sorts top generation members and their spouses without duplication.
                 const query = `
-                    MATCH (p:Person) 
-                    WHERE toInteger(p.genNumber) = 1 OR (p.genNumber IS NULL AND NOT (p)-[:CHILD_OF]->())
-                    WITH p
-                    OPTIONAL MATCH (p)-[:SPOUSE_OF]-(spouse:Person)
-                    OPTIONAL MATCH (p)-[:CHILD_OF]->(parent:Person)
-                    WITH p, 
-                         CASE WHEN spouse IS NOT NULL AND id(p) > id(spouse) THEN spouse ELSE null END as spouseNode,
-                         parent
-                    RETURN p.id AS id, 
-                           trim(coalesce(p.firstName, '') + ' ' + coalesce(p.lastName, '')) AS name, 
-                           coalesce(p.dob, 'Not Set') AS dob,
-                           spouseNode.firstName as spouseName,
-                           parent.id as parentId
-                    ORDER BY p.id
+                    CALL {
+                        MATCH (p:Person) WHERE toInteger(p.genNumber) = 1
+                        OPTIONAL MATCH (p)-[:SPOUSE_OF]-(s:Person) WHERE toInteger(s.genNumber) = 1
+                        WITH p, s WHERE s IS NULL OR id(p) < id(s)
+                        RETURN p as person, '' as indicator, p.id as sortKey, 0 as isSpouse
+                        UNION
+                        MATCH (p:Person)-[:SPOUSE_OF]-(s:Person) WHERE toInteger(p.genNumber) = 1 AND toInteger(s.genNumber) = 1 AND id(p) > id(s)
+                        RETURN p as person, '(Spouse of ' + s.firstName + ')' as indicator, s.id as sortKey, 1 as isSpouse
+                    }
+                    RETURN person.id as id,
+                           trim(coalesce(person.firstName, '') + ' ' + coalesce(person.lastName, '')) AS name,
+                           coalesce(person.dob, 'Not Set') AS dob,
+                           indicator
+                    ORDER BY sortKey, isSpouse
                 `;
                 const people = await this.runQuery(query);
                 this.renderPersonList(people);
@@ -286,21 +287,25 @@
                 const parentName = parentNameResult.length > 0 ? parentNameResult[0].name : parentId;
                 this.ui.selectionLabel.textContent = `Children of: ${parentName}`;
                 
+                // FIXED QUERY: Prevents duplication of spouses who are also children.
                 const query = `
                     CALL {
                         MATCH (parent:Person {id: $parentId})<-[:CHILD_OF]-(child:Person)
-                        RETURN child AS person, '' AS indicator, child.id AS sortKey, null as parentId
+                        RETURN child AS person, '' AS indicator, child.id AS sortKey, 0 as isSpouse, null as parentId
                         UNION
                         MATCH (parent:Person {id: $parentId})<-[:CHILD_OF]-(child:Person)-[:SPOUSE_OF]-(spouse:Person)
+                        WHERE NOT (spouse)-[:CHILD_OF]->(parent)
+                        WITH DISTINCT spouse, child
                         OPTIONAL MATCH (spouse)-[:CHILD_OF]->(spouseParent:Person)
-                        RETURN spouse AS person, '(Spouse of ' + child.firstName + ')' AS indicator, child.id AS sortKey, spouseParent.id as parentId
+                        WITH spouse, child, collect(spouseParent.id)[0] as firstParentId
+                        RETURN spouse AS person, '(Spouse of ' + child.firstName + ')' AS indicator, child.id AS sortKey, 1 as isSpouse, firstParentId as parentId
                     }
-                    RETURN person.id AS id,
+                    RETURN person.id as id,
                            trim(coalesce(person.firstName, '') + ' ' + coalesce(person.lastName, '')) AS name,
                            coalesce(person.dob, 'Not Set') AS dob,
                            indicator,
                            parentId
-                    ORDER BY sortKey, person.id
+                    ORDER BY sortKey, isSpouse
                 `;
                 const childrenAndSpouses = await this.runQuery(query, { parentId });
                 this.renderPersonList(childrenAndSpouses);
@@ -315,9 +320,7 @@
                     row.innerHTML = `<td colspan="3" class="block sm:table-cell px-6 py-4 text-center text-gray-500">No people found.</td>`;
                     this.ui.personList.appendChild(row);
                 } else {
-                    const uniquePeople = Array.from(new Map(people.map(p => [p.id, p])).values());
-
-                    uniquePeople.forEach(person => {
+                    people.forEach(person => {
                         const row = document.createElement('tr');
                         row.className = 'block sm:table-row border-b sm:border-none mb-2 sm:mb-0 cursor-pointer hover:bg-gray-50';
                         
@@ -328,10 +331,7 @@
                             } else {
                                 indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">${person.indicator}</span>`;
                             }
-                        } else if (person.spouseName) {
-                             indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">(Spouse of ${person.spouseName})</span>`;
                         }
-
 
                         row.innerHTML = `
                             <td data-label="ID:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-900">${person.id}</td>
