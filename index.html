@@ -606,10 +606,10 @@
 
                     if (type === 'modify') {
                         const oldId = relatedId;
-                        const oldChildNumber = initialData.childNumber;
-                        const newChildNumber = formData.childNumber;
+                        const oldChildNumber = initialData.childNumber ? String(initialData.childNumber) : '';
+                        const newChildNumber = formData.childNumber ? String(formData.childNumber) : '';
 
-                        if (newChildNumber && newChildNumber !== oldChildNumber) {
+                        if (newChildNumber && oldChildNumber && newChildNumber !== oldChildNumber) {
                             const parentResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id LIMIT 1', { id: oldId });
                             if (parentResult.length > 0) {
                                 const parentId = parentResult[0].id;
