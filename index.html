@@ -261,10 +261,9 @@
 
             async _displayTopGenInternal() {
                 this.ui.selectionLabel.textContent = 'Displaying Top Generation';
-                // FIXED QUERY: Robustly finds top generation members by casting genNumber to integer.
                 const query = `
                     MATCH (p:Person) 
-                    WHERE toInteger(p.genNumber) = 1
+                    WHERE toInteger(p.genNumber) = 1 OR (p.genNumber IS NULL AND NOT (p)-[:CHILD_OF]->())
                     RETURN p.id AS id, trim(coalesce(p.firstName, '') + ' ' + coalesce(p.lastName, '')) AS name, coalesce(p.dob, 'Not Set') AS dob
                     ORDER BY p.id
                 `;
@@ -294,25 +293,35 @@
                     const row = document.createElement('tr');
                     row.innerHTML = `<td colspan="3" class="block sm:table-cell px-6 py-4 text-center text-gray-500">No people found.</td>`;
                     this.ui.personList.appendChild(row);
-                    return;
+                } else {
+                    people.forEach(person => {
+                        const row = document.createElement('tr');
+                        row.className = 'block sm:table-row border-b sm:border-none mb-2 sm:mb-0 cursor-pointer hover:bg-gray-50';
+                        row.innerHTML = `
+                            <td data-label="ID:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-900">${person.id}</td>
+                            <td data-label="Name:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">${person.name}</td>
+                            <td data-label="DOB:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">${person.dob}</td>
+                        `;
+                        row.addEventListener('click', () => {
+                            document.querySelectorAll('#person-list tr').forEach(r => r.classList.remove('bg-blue-100'));
+                            row.classList.add('bg-blue-100');
+                            this.onPersonSelect(person.id, person.name);
+                        });
+                        row.addEventListener('dblclick', () => this.viewChildren());
+                        this.ui.personList.appendChild(row);
+                    });
                 }
 
-                people.forEach(person => {
-                    const row = document.createElement('tr');
-                    row.className = 'block sm:table-row border-b sm:border-none mb-2 sm:mb-0 cursor-pointer hover:bg-gray-50';
-                    row.innerHTML = `
-                        <td data-label="ID:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-900">${person.id}</td>
-                        <td data-label="Name:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">${person.name}</td>
-                        <td data-label="DOB:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">${person.dob}</td>
-                    `;
-                    row.addEventListener('click', () => {
-                        document.querySelectorAll('#person-list tr').forEach(r => r.classList.remove('bg-blue-100'));
-                        row.classList.add('bg-blue-100');
-                        this.onPersonSelect(person.id, person.name);
-                    });
-                    row.addEventListener('dblclick', () => this.viewChildren());
-                    this.ui.personList.appendChild(row);
-                });
+                // FIXED: If viewing children, enable Add Child/Spouse for the parent,
+                // regardless of whether there are children to display.
+                if (this.viewMode === 'children') {
+                    this.currentPersonId = this.viewContextId; // Set active person to the parent
+                    this.ui.buttons.addChild.disabled = false;
+                    this.ui.buttons.addChild.classList.remove('btn-disabled');
+                    this.ui.buttons.addSpouse.disabled = false;
+                    this.ui.buttons.addSpouse.classList.remove('btn-disabled');
+                    this.ui.selectionLabel.textContent += `. Actions apply to parent.`;
+                }
             },
 
             // --- UI State & Event Handlers ---
