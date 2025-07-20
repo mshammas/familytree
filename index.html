@@ -261,9 +261,10 @@
 
             async _displayTopGenInternal() {
                 this.ui.selectionLabel.textContent = 'Displaying Top Generation';
+                // FIXED QUERY: Rely on genNumber = 1 as the source of truth for the top generation.
                 const query = `
                     MATCH (p:Person) 
-                    WHERE p.genNumber = 1 OR (p.genNumber IS NULL AND NOT (p)-[:CHILD_OF]->())
+                    WHERE p.genNumber = 1
                     RETURN p.id AS id, trim(coalesce(p.firstName, '') + ' ' + coalesce(p.lastName, '')) AS name, coalesce(p.dob, 'Not Set') AS dob
                     ORDER BY p.id
                 `;
@@ -441,7 +442,7 @@
                     
                     const newSpouseForm = this.ui.modal.form.querySelector('#new-spouse-form');
                     
-                    const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
+                    const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" data-key="genNumber" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
                     newSpouseForm.insertAdjacentHTML('beforeend', genField);
 
                     schema.forEach(key => {
@@ -460,7 +461,7 @@
 
                 } else {
                     if (type !== 'modify') {
-                        const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
+                        const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" data-key="genNumber" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
                         this.ui.modal.form.insertAdjacentHTML('beforeend', genField);
                     }
                     
@@ -539,12 +540,13 @@
                     }
 
                     const formData = {};
-                    if (type !== 'modify') formData.genNumber = genNumber;
-                    
                     let newId = (type === 'modify') ? relatedId : null;
                     
-                    this.ui.modal.form.querySelectorAll('[data-key]').forEach(input => {
-                        formData[input.dataset.key] = input.value;
+                    this.ui.modal.form.querySelectorAll('[data-key], input:disabled').forEach(input => {
+                        if (input.dataset.key || input.value) {
+                            const key = input.dataset.key || 'genNumber';
+                             formData[key] = input.value;
+                        }
                     });
 
                     if (type === 'modify') {
