@@ -39,7 +39,7 @@
 </head>
 <body class="bg-gray-100 font-sans">
 
-    <div id="app" class="container mx-auto p-2 sm:p-4 max-w-4xl">
+    <div id="app" class="container mx-auto p-2 sm:p-4 max-w-7xl">
 
         <!-- Connection Screen -->
         <div id="connection-screen" class="flex items-center justify-center min-h-screen">
@@ -261,7 +261,6 @@
 
             async _displayTopGenInternal() {
                 this.ui.selectionLabel.textContent = 'Displaying Top Generation';
-                // FIXED QUERY: Robustly finds and sorts top generation members and their spouses without duplication.
                 const query = `
                     CALL {
                         MATCH (p:Person) WHERE toInteger(p.genNumber) = 1
@@ -287,7 +286,6 @@
                 const parentName = parentNameResult.length > 0 ? parentNameResult[0].name : parentId;
                 this.ui.selectionLabel.textContent = `Children of: ${parentName}`;
                 
-                // FIXED QUERY: Prevents duplication of spouses who are also children.
                 const query = `
                     CALL {
                         MATCH (parent:Person {id: $parentId})<-[:CHILD_OF]-(child:Person)
