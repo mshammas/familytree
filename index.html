@@ -344,9 +344,9 @@
                         }
 
                         row.innerHTML = `
-                            <td data-label="ID:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-900">${person.id}</td>
-                            <td data-label="Name:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">${person.name} ${indicatorHTML}</td>
-                            <td data-label="DOB:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">${person.dob}</td>
+                            <td data-label="ID:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base font-medium text-gray-900">${person.id}</td>
+                            <td data-label="Name:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${person.name} ${indicatorHTML}</td>
+                            <td data-label="DOB:" class="block sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${person.dob}</td>
                         `;
                         row.addEventListener('click', (e) => {
                             if (e.target.classList.contains('view-parents-link')) {
@@ -537,10 +537,10 @@
                     this.ui.modal.form.innerHTML = `
                         <div class="flex items-center">
                             <input id="existing-spouse-checkbox" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
-                            <label for="existing-spouse-checkbox" class="ml-2 block text-sm text-gray-900">Is spouse an existing person?</label>
+                            <label for="existing-spouse-checkbox" class="ml-2 block text-base text-gray-900">Is spouse an existing person?</label>
                         </div>
                         <div id="link-spouse-form" class="hidden space-y-2 pt-2">
-                             <p class="text-xs text-gray-500">If the person doesn't exist yet, please add them to the tree first, then link them here.</p>
+                             <p class="text-sm text-gray-500">If the person doesn't exist yet, please add them to the tree first, then link them here.</p>
                              <input type="text" id="existing-spouse-id" placeholder="Enter existing person's ID" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div id="new-spouse-form" class="space-y-4"></div>
@@ -548,7 +548,7 @@
                     
                     const newSpouseForm = this.ui.modal.form.querySelector('#new-spouse-form');
                     
-                    const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" data-key="genNumber" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
+                    const genField = `<div><label class="block text-base font-medium">genNumber</label><input type="text" data-key="genNumber" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
                     newSpouseForm.insertAdjacentHTML('beforeend', genField);
 
                     schema.forEach(key => {
@@ -569,7 +569,7 @@
                     if (type === 'modify' && initialData.parentNames && initialData.parentNames.length > 0) {
                         const parentNamesString = initialData.parentNames.join(', ');
                         const quickInfoHTML = `
-                            <div class="mb-4 p-3 bg-gray-50 rounded-md border text-sm text-gray-600">
+                            <div class="mb-4 p-3 bg-gray-50 rounded-md border text-base text-gray-600">
                                 <strong>Parents:</strong> ${parentNamesString}
                             </div>
                         `;
@@ -577,7 +577,7 @@
                     }
 
                     if (type !== 'modify') {
-                        const genField = `<div><label class="block text-sm font-medium">genNumber</label><input type="text" data-key="genNumber" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
+                        const genField = `<div><label class="block text-base font-medium">genNumber</label><input type="text" data-key="genNumber" value="${genNumber}" disabled class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300"></div>`;
                         this.ui.modal.form.insertAdjacentHTML('beforeend', genField);
                     }
                     
@@ -585,7 +585,7 @@
                         let spouseOptions = context.spouses.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join('');
                         const spouseSelectorHTML = `
                             <div>
-                                <label class="block text-sm font-medium">Other Parent (Spouse)*</label>
+                                <label class="block text-base font-medium">Other Parent (Spouse)*</label>
                                 <select id="spouse-selector" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                                     ${spouseOptions}
                                 </select>
@@ -605,7 +605,7 @@
                     if (type === 'modify') {
                         const parentSectionHTML = `
                             <div class="border-t pt-4 mt-4">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Parents</label>
+                                <label class="block text-base font-medium text-gray-700 mb-2">Parents</label>
                                 <div id="parents-list" class="space-y-2"></div>
                                 <button type="button" id="add-parent-btn" class="mt-2 text-sm text-blue-600 hover:text-blue-800">+ Add Parent</button>
                             </div>
@@ -802,13 +802,13 @@
                 if (key === 'dob' || key === 'dod') {
                     fieldHTML = `
                         <div>
-                            <label class="block text-sm font-medium">${label}</label>
+                            <label class="block text-base font-medium">${label}</label>
                             <input type="text" data-key="${key}" value="${value}" placeholder="YYYY or YYYY-MM-DD" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>`;
                 } else if (key === 'gender') {
                     fieldHTML = `
                         <div>
-                            <label class="block text-sm font-medium">${label}</label>
+                            <label class="block text-base font-medium">${label}</label>
                             <select data-key="${key}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                 <option value="" ${value === '' ? 'selected' : ''}></option>
                                 <option value="M" ${value === 'M' ? 'selected' : ''}>M</option>
@@ -818,7 +818,7 @@
                 } else {
                     fieldHTML = `
                         <div>
-                            <label class="block text-sm font-medium">${label}</label>
+                            <label class="block text-base font-medium">${label}</label>
                             <input type="text" data-key="${key}" value="${value}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>`;
                 }
