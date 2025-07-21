@@ -211,7 +211,6 @@ def modify_person_menu(tree):
         is_req = prop in mandatory_keys
         current_value = person.get(prop, "")
         
-        # A value MUST be provided if the field is mandatory AND currently empty.
         must_provide_value = is_req and not current_value
         
         prompt = f"{prop} (currently '{current_value}')"
@@ -275,14 +274,29 @@ def list_all_persons_menu(tree):
     if not persons:
         print("-> No people found in the database.")
         return
-    max_id = max((len(p.get('id') or '') for p in persons), default=2)
-    max_first = max((len(p.get('firstName') or '') for p in persons), default=9)
-    max_last = max((len(p.get('lastName') or '') for p in persons), default=8)
+
+    # Ensure all values are strings before calculating length
+    safe_persons = []
+    for p in persons:
+        safe_persons.append({
+            'id': str(p.get('id') or ''),
+            'firstName': str(p.get('firstName') or ''),
+            'lastName': str(p.get('lastName') or '')
+        })
+
+    max_id = max((len(p['id']) for p in safe_persons), default=2)
+    max_first = max((len(p['firstName']) for p in safe_persons), default=9)
+    max_last = max((len(p['lastName']) for p in safe_persons), default=8)
+
     header = f"{'ID'.ljust(max_id)} | {'First Name'.ljust(max_first)} | {'Last Name'.ljust(max_last)}"
     print(header)
     print(f"{'-' * max_id}-+-{'-' * max_first}-+-{'-' * max_last}")
-    for person in persons:
-        print(f"{person.get('id', 'N/A').ljust(max_id)} | {person.get('firstName', 'N/A').ljust(max_first)} | {person.get('lastName', 'N/A').ljust(max_last)}")
+
+    for person in safe_persons:
+        id_val = person.get('id', 'N/A')
+        first_val = person.get('firstName', 'N/A')
+        last_val = person.get('lastName', 'N/A')
+        print(f"{id_val.ljust(max_id)} | {first_val.ljust(max_first)} | {last_val.ljust(max_last)}")
     print("-" * len(header))
 
 def relationship_menu(tree):
