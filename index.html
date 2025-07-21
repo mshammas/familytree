@@ -31,7 +31,6 @@
                 content: attr(data-label);
                 font-weight: 600; /* semibold */
                 width: 7rem; /* 112px */
-                flex-shrink: 0; /* Prevent label from shrinking */
                 display: inline-block;
                 color: #4b5563; /* gray-600 */
             }
@@ -234,6 +233,15 @@
                         this.saveChildNumber(personId, input.value, originalValue);
                     }
                 });
+
+                // FIXED: Add event delegation for dynamic links in the header
+                this.ui.selectionLabel.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('view-parents-link')) {
+                        e.preventDefault();
+                        const parentId = e.target.dataset.parentId;
+                        this._loadView('children', parentId, true);
+                    }
+                });
             },
 
             // --- Connection Logic ---
@@ -362,9 +370,7 @@
                 this.ui.personList.innerHTML = '';
                 this.resetButtons();
                 
-                if (label) {
-                    this.ui.selectionLabel.innerHTML = label;
-                }
+                let finalLabel = label || this.ui.selectionLabel.innerHTML;
 
                 // Update table header based on view mode
                 this.ui.personListHeader.innerHTML = `
@@ -386,23 +392,21 @@
                         row.className = 'block sm:table-row border-b sm:border-none mb-2 sm:mb-0 cursor-pointer hover:bg-gray-50';
                         
                         let indicatorHTML = '';
-                        let childNumberContent = '';
-                        let childNumberDataLabel = 'Child #:';
-
-                        if (person.indicator) { // It's a spouse
+                        if (person.indicator) {
                             if (person.parentId) {
                                 indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">${person.indicator} <a href="#" data-parent-id="${person.parentId}" class="text-blue-500 hover:underline view-parents-link">(view parents)</a></span>`;
                             } else {
                                 indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">${person.indicator}</span>`;
                             }
-                            childNumberContent = indicatorHTML; // Put indicator in the child number cell
-                            childNumberDataLabel = ''; // Hide the label on mobile for spouses
-                        } else { // It's a main person/child
+                        }
+                        
+                        let childNumberHTML = '';
+                        if (!person.indicator) {
                             const cnValue = person.childNumber;
                             const childNum = (typeof cnValue === 'object' && cnValue !== null && cnValue.low !== undefined) ? cnValue.low : cnValue;
                             const displayNum = (childNum === null || childNum === undefined) ? '' : childNum;
 
-                            childNumberContent = `
+                            childNumberHTML = `
                                 <div class="flex items-center gap-1" data-person-id="${person.id}" data-original-cn="${displayNum}">
                                     <input type="number" value="${displayNum}" class="w-16 p-1 border rounded-md bg-gray-100" disabled data-cn-input>
                                     <button class="text-xs text-blue-500 hover:underline" data-action="edit-cn">Edit</button>
@@ -414,8 +418,8 @@
 
                         row.innerHTML = `
                             <td data-label="ID:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-700">${person.id}</td>
-                            <td data-label="Name:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-lg font-semibold text-gray-800">${person.name}</td>
-                            <td data-label="${childNumberDataLabel}" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${childNumberContent}</td>
+                            <td data-label="Name:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-lg font-semibold text-gray-800">${person.name} ${indicatorHTML}</td>
+                            <td data-label="${person.indicator ? '' : 'Child #:'}" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${childNumberHTML}</td>
                             <td data-label="DOB:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${person.dob}</td>
                         `;
                         row.addEventListener('click', (e) => {
@@ -444,8 +448,10 @@
                     this.ui.buttons.addChild.classList.remove('btn-disabled');
                     this.ui.buttons.addSpouse.disabled = false;
                     this.ui.buttons.addSpouse.classList.remove('btn-disabled');
-                    this.ui.selectionLabel.innerHTML += `<span class="italic text-gray-500">. Actions apply to parent.</span>`;
+                    finalLabel += `<span class="italic text-gray-500">. Actions apply to parent.</span>`;
                 }
+                
+                this.ui.selectionLabel.innerHTML = finalLabel;
             },
 
             // --- UI State & Event Handlers ---
