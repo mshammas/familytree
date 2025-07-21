@@ -862,7 +862,7 @@
                             }
                         }
                         
-                        const newParentIds = Array.from(document.querySelectorAll('[data-parent-id]'))
+                        const newParentIds = Array.from(this.ui.modal.form.querySelectorAll('[data-parent-id]'))
                             .map(input => input.value.trim())
                             .filter(Boolean);
                         const uniqueParentIds = [...new Set(newParentIds)];
