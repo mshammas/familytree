@@ -204,6 +204,15 @@
                 
                 // Search
                 this.ui.searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
+                
+                // Event delegation for dynamic links in the header
+                this.ui.selectionLabel.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('view-parents-link')) {
+                        e.preventDefault();
+                        const parentId = e.target.dataset.parentId;
+                        this._loadView('children', parentId, true);
+                    }
+                });
             },
 
             // --- Connection Logic ---
@@ -272,7 +281,6 @@
             },
 
             async _displayTopGenInternal() {
-                this.ui.selectionLabel.textContent = 'Displaying Top Generation';
                 const query = `
                     CALL {
                         MATCH (p:Person) WHERE toInteger(p.genNumber) = 1
@@ -290,7 +298,7 @@
                     ORDER BY sortKey, isSpouse
                 `;
                 const people = await this.runQuery(query);
-                this.renderPersonList(people);
+                this.renderPersonList(people, 'Displaying Top Generation');
             },
 
             async _displayChildrenInternal(parentId) {
@@ -303,8 +311,7 @@
                     const gpLinks = parentInfo.grandParents.map(gp => `<a href="#" data-parent-id="${gp.id}" class="text-blue-500 hover:underline view-parents-link">${gp.name}</a>`).join(', ');
                     labelHTML += ` <span class="text-sm">(Parents: ${gpLinks})</span>`;
                 }
-                this.ui.selectionLabel.innerHTML = labelHTML;
-
+                
                 const query = `
                     CALL {
                         MATCH (parent:Person {id: $parentId})<-[:CHILD_OF]-(child:Person)
@@ -325,12 +332,16 @@
                     ORDER BY sortKey, isSpouse
                 `;
                 const childrenAndSpouses = await this.runQuery(query, { parentId });
-                this.renderPersonList(childrenAndSpouses);
+                this.renderPersonList(childrenAndSpouses, labelHTML);
             },
 
-            renderPersonList(people) {
+            renderPersonList(people, label) {
                 this.ui.personList.innerHTML = '';
                 this.resetButtons();
+                
+                if (label) {
+                    this.ui.selectionLabel.innerHTML = label;
+                }
 
                 if (people.length === 0) {
                     const row = document.createElement('tr');
@@ -383,14 +394,6 @@
                     this.ui.buttons.addSpouse.classList.remove('btn-disabled');
                     this.ui.selectionLabel.innerHTML += `<span class="italic text-gray-500">. Actions apply to parent.</span>`;
                 }
-                
-                this.ui.selectionLabel.addEventListener('click', (e) => {
-                    if (e.target.classList.contains('view-parents-link')) {
-                        e.preventDefault();
-                        const parentId = e.target.dataset.parentId;
-                        this._loadView('children', parentId, true);
-                    }
-                });
             },
 
             // --- UI State & Event Handlers ---
