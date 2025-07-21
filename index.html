@@ -294,10 +294,17 @@
             },
 
             async _displayChildrenInternal(parentId) {
-                const parentNameResult = await this.runQuery('MATCH (p:Person {id: $id}) RETURN p.firstName as name', { id: parentId });
-                const parentName = parentNameResult.length > 0 ? parentNameResult[0].name : parentId;
-                this.ui.selectionLabel.textContent = `Children of: ${parentName}`;
+                const parentInfoResult = await this.runQuery('MATCH (p:Person {id: $id}) OPTIONAL MATCH (p)-[:CHILD_OF]->(gp:Person) RETURN p.firstName as firstName, p.lastName as lastName, collect({id: gp.id, name: gp.firstName}) as grandParents', { id: parentId });
+                const parentInfo = parentInfoResult.length > 0 ? parentInfoResult[0] : { firstName: parentId, lastName: '', grandParents: [] };
+                const parentName = `${parentInfo.firstName || ''} ${parentInfo.lastName || ''}`.trim();
                 
+                let labelHTML = `Children of: ${parentName}`;
+                if (parentInfo.grandParents && parentInfo.grandParents.length > 0) {
+                    const gpLinks = parentInfo.grandParents.map(gp => `<a href="#" data-parent-id="${gp.id}" class="text-blue-500 hover:underline view-parents-link">${gp.name}</a>`).join(', ');
+                    labelHTML += ` <span class="text-sm">(Parents: ${gpLinks})</span>`;
+                }
+                this.ui.selectionLabel.innerHTML = labelHTML;
+
                 const query = `
                     CALL {
                         MATCH (parent:Person {id: $parentId})<-[:CHILD_OF]-(child:Person)
@@ -374,8 +381,16 @@
                     this.ui.buttons.addChild.classList.remove('btn-disabled');
                     this.ui.buttons.addSpouse.disabled = false;
                     this.ui.buttons.addSpouse.classList.remove('btn-disabled');
-                    this.ui.selectionLabel.textContent += `. Actions apply to parent.`;
+                    this.ui.selectionLabel.innerHTML += `<span class="italic text-gray-500">. Actions apply to parent.</span>`;
                 }
+                
+                this.ui.selectionLabel.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('view-parents-link')) {
+                        e.preventDefault();
+                        const parentId = e.target.dataset.parentId;
+                        this._loadView('children', parentId, true);
+                    }
+                });
             },
 
             // --- UI State & Event Handlers ---
@@ -612,6 +627,15 @@
                         `;
                         this.ui.modal.form.insertAdjacentHTML('beforeend', parentSectionHTML);
 
+                        const actionsSectionHTML = `
+                            <div class="border-t pt-4 mt-4">
+                                <label class="block text-base font-medium text-gray-700 mb-2">Actions</label>
+                                <button type="button" id="modal-view-children-btn" class="btn btn-secondary">View Children</button>
+                            </div>
+                        `;
+                        this.ui.modal.form.insertAdjacentHTML('beforeend', actionsSectionHTML);
+
+
                         const parentsListDiv = document.getElementById('parents-list');
                         const addParentBtn = document.getElementById('add-parent-btn');
 
@@ -792,6 +816,15 @@
                     this.ui.modal.submit.removeEventListener('click', submitHandler);
                     this.ui.modal.cancel.removeEventListener('click', closeModal);
                 };
+                
+                const viewChildrenBtn = document.getElementById('modal-view-children-btn');
+                const viewChildrenHandler = () => {
+                    closeModal();
+                    this._loadView('children', relatedId, true);
+                };
+                if (viewChildrenBtn) {
+                    viewChildrenBtn.addEventListener('click', viewChildrenHandler);
+                }
 
                 this.ui.modal.submit.addEventListener('click', submitHandler);
                 this.ui.modal.cancel.addEventListener('click', closeModal);
