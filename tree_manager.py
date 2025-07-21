@@ -200,7 +200,7 @@ def modify_person_menu(tree):
         print("❌ Error: Person not found.")
         return
     print("\n--- Modifying Person ---")
-    print("Enter new values below (or press Enter to keep the current value).")
+    print("Press Enter to keep the current value. Type '_clear' to remove an optional value.")
     
     schema = tree.get_person_schema()
     mandatory_keys = tree.get_mandatory_keys()
@@ -210,14 +210,24 @@ def modify_person_menu(tree):
     for prop in schema:
         is_req = prop in mandatory_keys
         current_value = person.get(prop, "")
-        prompt = f"{prop} (currently '{current_value}'){' (mandatory)' if is_req else ''}"
-        new_val = get_input(prompt, required=is_req)
+        
+        # A value MUST be provided if the field is mandatory AND currently empty.
+        must_provide_value = is_req and not current_value
+        
+        prompt = f"{prop} (currently '{current_value}')"
+        if must_provide_value:
+            prompt += " (mandatory)"
+            
+        new_val = get_input(prompt, required=must_provide_value)
 
-        if new_val != current_value:
-            if new_val:
-                props_to_set[prop] = new_val
-            elif not is_req: # Can only clear non-mandatory fields
+        if new_val.lower() == '_clear':
+            if is_req:
+                print(f"❌ Cannot clear mandatory field '{prop}'. Modification for this field skipped.")
+            else:
                 props_to_remove.append(prop)
+        elif new_val and new_val != current_value:
+            props_to_set[prop] = new_val
+        # If new_val is blank, do nothing (value is retained).
     
     tree.update_person(person_id, props_to_set, props_to_remove)
 
@@ -265,22 +275,14 @@ def list_all_persons_menu(tree):
     if not persons:
         print("-> No people found in the database.")
         return
-
-    # Safely calculate max column widths, defaulting to an empty string if a value is None
     max_id = max((len(p.get('id') or '') for p in persons), default=2)
     max_first = max((len(p.get('firstName') or '') for p in persons), default=9)
     max_last = max((len(p.get('lastName') or '') for p in persons), default=8)
-
     header = f"{'ID'.ljust(max_id)} | {'First Name'.ljust(max_first)} | {'Last Name'.ljust(max_last)}"
     print(header)
     print(f"{'-' * max_id}-+-{'-' * max_first}-+-{'-' * max_last}")
-
     for person in persons:
-        # Safely get values, defaulting to 'N/A' if None
-        id_val = person.get('id') or 'N/A'
-        first_val = person.get('firstName') or 'N/A'
-        last_val = person.get('lastName') or 'N/A'
-        print(f"{id_val.ljust(max_id)} | {first_val.ljust(max_first)} | {last_val.ljust(max_last)}")
+        print(f"{person.get('id', 'N/A').ljust(max_id)} | {person.get('firstName', 'N/A').ljust(max_first)} | {person.get('lastName', 'N/A').ljust(max_last)}")
     print("-" * len(header))
 
 def relationship_menu(tree):
