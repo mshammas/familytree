@@ -31,6 +31,7 @@
                 content: attr(data-label);
                 font-weight: 600; /* semibold */
                 width: 7rem; /* 112px */
+                flex-shrink: 0; /* Prevent label from shrinking */
                 display: inline-block;
                 color: #4b5563; /* gray-600 */
             }
@@ -202,35 +203,40 @@
                 // Search
                 this.ui.searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
                 
-                // Event Delegation for inline editing of childNumber
+                // Event Delegation for inline editing
                 this.ui.personList.addEventListener('click', (e) => {
                     const action = e.target.dataset.action;
                     if (!action) return;
 
                     const container = e.target.closest('[data-person-id]');
                     const personId = container.dataset.personId;
-                    const input = container.querySelector('[data-cn-input]');
-                    const originalValue = container.dataset.originalCn;
-                    const editBtn = container.querySelector('[data-action="edit-cn"]');
-                    const saveBtn = container.querySelector('[data-action="save-cn"]');
-                    const cancelBtn = container.querySelector('[data-action="cancel-cn"]');
+                    const input = container.querySelector(`[data-action-input="${action.split('-')[1]}"]`);
+                    const originalValue = container.dataset.originalValue;
+                    const editBtn = container.querySelector(`[data-action="edit-${action.split('-')[1]}"]`);
+                    const saveBtn = container.querySelector(`[data-action="save-${action.split('-')[1]}"]`);
+                    const cancelBtn = container.querySelector(`[data-action="cancel-${action.split('-')[1]}"]`);
 
-                    if (action === 'edit-cn') {
+                    if (action.startsWith('edit-')) {
                         input.disabled = false;
                         input.classList.remove('bg-gray-100');
                         input.focus();
                         editBtn.classList.add('hidden');
                         saveBtn.classList.remove('hidden');
                         cancelBtn.classList.remove('hidden');
-                    } else if (action === 'cancel-cn') {
+                    } else if (action.startsWith('cancel-')) {
                         input.value = originalValue;
                         input.disabled = true;
                         input.classList.add('bg-gray-100');
                         editBtn.classList.remove('hidden');
                         saveBtn.classList.add('hidden');
                         cancelBtn.classList.add('hidden');
-                    } else if (action === 'save-cn') {
-                        this.saveChildNumber(personId, input.value, originalValue);
+                    } else if (action.startsWith('save-')) {
+                        const property = action.split('-')[1];
+                        if (property === 'cn') {
+                             this.saveChildNumber(personId, input.value, originalValue);
+                        } else {
+                            this.saveProperty(personId, property, input.value);
+                        }
                     }
                 });
 
@@ -323,6 +329,7 @@
                     RETURN person.id as id,
                            trim(coalesce(person.firstName, '') + ' ' + coalesce(person.lastName, '')) AS name,
                            coalesce(person.dob, 'Not Set') AS dob,
+                           coalesce(person.dod, 'N/A') AS dod,
                            indicator,
                            childNumber
                     ORDER BY sortKey, isSpouse
@@ -357,6 +364,7 @@
                     RETURN person.id as id,
                            trim(coalesce(person.firstName, '') + ' ' + coalesce(person.lastName, '')) AS name,
                            coalesce(person.dob, 'Not Set') AS dob,
+                           coalesce(person.dod, 'N/A') AS dod,
                            indicator,
                            parentId,
                            childNumber
@@ -380,13 +388,14 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Child #</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date of Birth</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DOB</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DOD</th>
                     </tr>
                 `;
 
                 if (people.length === 0) {
                     const row = document.createElement('tr');
-                    row.innerHTML = `<td colspan="4" class="block sm:table-cell px-6 py-4 text-center text-gray-500">No people found.</td>`;
+                    row.innerHTML = `<td colspan="5" class="block sm:table-cell px-6 py-4 text-center text-gray-500">No people found.</td>`;
                     this.ui.personList.appendChild(row);
                 } else {
                     people.forEach(person => {
@@ -394,26 +403,23 @@
                         row.className = 'block sm:table-row border-b sm:border-none mb-2 sm:mb-0 cursor-pointer hover:bg-gray-50';
                         
                         let indicatorHTML = '';
-                        let childNumberContent = '';
-                        let childNumberDataLabel = 'Child #:';
-
-                        if (person.indicator) { // It's a spouse
-                            childNumberDataLabel = ''; // Hide label on mobile
+                        if (person.indicator) {
                             if (person.parentId) {
                                 indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">${person.indicator} <a href="#" data-parent-id="${person.parentId}" class="text-blue-500 hover:underline view-parents-link">(view parents)</a></span>`;
                             } else {
                                 indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">${person.indicator}</span>`;
                             }
-                            // On mobile, this will be the only content in the childNumber cell
-                            childNumberContent = `<div class="sm:hidden">${indicatorHTML}</div>`; 
-                        } else { // It's a main person/child
+                        }
+                        
+                        let childNumberHTML = '';
+                        if (!person.indicator) {
                             const cnValue = person.childNumber;
                             const childNum = (typeof cnValue === 'object' && cnValue !== null && cnValue.low !== undefined) ? cnValue.low : cnValue;
                             const displayNum = (childNum === null || childNum === undefined) ? '' : childNum;
 
-                            childNumberContent = `
+                            childNumberHTML = `
                                 <div class="flex items-center gap-1" data-person-id="${person.id}" data-original-cn="${displayNum}">
-                                    <input type="number" value="${displayNum}" class="w-16 p-1 border rounded-md bg-gray-100" disabled data-cn-input>
+                                    <input type="number" value="${displayNum}" class="w-16 p-1 border rounded-md bg-gray-100" disabled data-action-input="cn">
                                     <button class="text-xs text-blue-500 hover:underline" data-action="edit-cn">Edit</button>
                                     <button class="text-xs text-green-500 hover:underline hidden" data-action="save-cn">Save</button>
                                     <button class="text-xs text-red-500 hover:underline hidden" data-action="cancel-cn">Cancel</button>
@@ -421,11 +427,30 @@
                             `;
                         }
 
+                        const dobHTML = `
+                            <div class="flex items-center gap-1" data-person-id="${person.id}" data-original-value="${person.dob}">
+                                <input type="text" value="${person.dob}" class="w-28 p-1 border rounded-md bg-gray-100" disabled data-action-input="dob">
+                                <button class="text-xs text-blue-500 hover:underline" data-action="edit-dob">Edit</button>
+                                <button class="text-xs text-green-500 hover:underline hidden" data-action="save-dob">Save</button>
+                                <button class="text-xs text-red-500 hover:underline hidden" data-action="cancel-dob">Cancel</button>
+                            </div>
+                        `;
+                        const dodHTML = `
+                            <div class="flex items-center gap-1" data-person-id="${person.id}" data-original-value="${person.dod}">
+                                <input type="text" value="${person.dod}" class="w-28 p-1 border rounded-md bg-gray-100" disabled data-action-input="dod">
+                                <button class="text-xs text-blue-500 hover:underline" data-action="edit-dod">Edit</button>
+                                <button class="text-xs text-green-500 hover:underline hidden" data-action="save-dod">Save</button>
+                                <button class="text-xs text-red-500 hover:underline hidden" data-action="cancel-dod">Cancel</button>
+                            </div>
+                        `;
+
+
                         row.innerHTML = `
                             <td data-label="ID:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-700">${person.id}</td>
                             <td data-label="Name:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-lg font-semibold text-gray-800">${person.name} <span class="hidden sm:inline">${indicatorHTML}</span></td>
-                            <td data-label="${childNumberDataLabel}" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${childNumberContent}</td>
-                            <td data-label="DOB:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${person.dob}</td>
+                            <td data-label="${person.indicator ? '' : 'Child #:'}" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${childNumberHTML}</td>
+                            <td data-label="DOB:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${dobHTML}</td>
+                            <td data-label="DOD:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${dodHTML}</td>
                         `;
                         row.addEventListener('click', (e) => {
                             if (e.target.classList.contains('view-parents-link')) {
@@ -645,6 +670,13 @@
                 `;
                 await this.runQuery(updateQuery, { oldId, newId, newChildNumber, oldIdBase: oldId, newIdBase: newId });
                 alert('Child Number and all descendant IDs updated successfully!');
+                this.refreshCurrentView();
+            },
+            
+            async saveProperty(personId, property, value) {
+                const query = `MATCH (p:Person {id: $id}) SET p.${property} = $value`;
+                await this.runQuery(query, { id: personId, value: value });
+                alert(`${property} updated successfully!`);
                 this.refreshCurrentView();
             },
 
