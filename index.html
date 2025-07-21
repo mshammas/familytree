@@ -362,12 +362,12 @@
             },
 
             async _displayChildrenInternal(parentId) {
-                const parentInfoResult = await this.runQuery('MATCH (p:Person {id: $id}) OPTIONAL MATCH (p)-[:CHILD_OF]->(gp:Person) RETURN p.firstName as firstName, p.lastName as lastName, collect({id: gp.id, name: gp.firstName}) as grandParents', { id: parentId });
+                const parentInfoResult = await this.runQuery('MATCH (p:Person {id: $id}) OPTIONAL MATCH (p)-[:CHILD_OF]->(gp:Person) RETURN p.firstName as firstName, p.lastName as lastName, collect({id: gp.id, name: trim(coalesce(gp.firstName, "") + " " + coalesce(gp.lastName, ""))}) as grandParents', { id: parentId });
                 const parentInfo = parentInfoResult.length > 0 ? parentInfoResult[0] : { firstName: parentId, lastName: '', grandParents: [] };
                 const parentName = `${parentInfo.firstName || ''} ${parentInfo.lastName || ''}`.trim();
                 
                 let labelHTML = `Children of: ${parentName}`;
-                if (parentInfo.grandParents && parentInfo.grandParents.length > 0) {
+                if (parentInfo.grandParents && parentInfo.grandParents.length > 0 && parentInfo.grandParents[0].id) {
                     const gpLinks = parentInfo.grandParents.map(gp => `<a href="#" data-parent-id="${gp.id}" class="text-blue-500 hover:underline view-parents-link">${gp.name}</a>`).join(', ');
                     labelHTML += ` <span class="text-sm">(Parents: ${gpLinks})</span>`;
                 }
@@ -576,7 +576,7 @@
                     div.textContent = `${person.firstName || ''} ${person.lastName || ''} (${person.id})`;
                     div.addEventListener('click', () => {
                         this.currentPersonId = person.id;
-                        this.modifyPerson();
+                        this.showDetails(person.id);
                         this.ui.searchInput.value = '';
                         this.ui.searchResults.classList.add('hidden');
                     });
@@ -635,7 +635,7 @@
                 const personDataResult = (await this.runQuery('MATCH (p:Person {id: $id}) RETURN p', { id: this.currentPersonId }))[0];
                 const personData = personDataResult.p.properties;
 
-                const parentsResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN collect({id: p.id, name: p.firstName}) as parents', { id: this.currentPersonId });
+                const parentsResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN collect({id: p.id, name: trim(coalesce(p.firstName, "") + " " + coalesce(p.lastName, ""))}) as parents', { id: this.currentPersonId });
                 const parentsInfo = parentsResult.length > 0 ? parentsResult[0].parents : [];
                 
                 personData.parents = parentsInfo.map(p => p.id);
@@ -886,7 +886,7 @@
                         }
                         
                         const newParentIds = Array.from(this.ui.modal.form.querySelectorAll('[data-parent-id]'))
-                            .map(input => input.value.trim())
+                            .map(input => (input.value || '').trim())
                             .filter(Boolean);
                         const uniqueParentIds = [...new Set(newParentIds)];
 
