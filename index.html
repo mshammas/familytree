@@ -594,12 +594,14 @@
                 }
                 
                 const parentResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN p.id as id LIMIT 1', { id: oldId });
-                if (parentResult.length === 0) {
-                    alert('Could not find a parent for this person. ID cannot be updated.');
+                const parentId = (parentResult.length > 0) ? parentResult[0].id : oldId.substring(0, oldId.lastIndexOf('_'));
+
+
+                if (!parentId) {
+                    alert('Could not determine parent for this person. ID cannot be updated.');
                     this.refreshCurrentView();
                     return;
                 }
-                const parentId = parentResult[0].id;
                 const newId = `${parentId}_${newChildNumber}`;
 
                 if (newId === oldId) {
@@ -628,7 +630,7 @@
                     SET d.id = $newIdBase + substring(d.id, size(oldIdBase))
                     RETURN count(d)
                 `;
-                await this.runQuery(updateQuery, { oldId, newId, newChildNumber });
+                await this.runQuery(updateQuery, { oldId, newId, newChildNumber, oldIdBase: oldId, newIdBase: newId });
                 alert('Child Number and all descendant IDs updated successfully!');
                 this.refreshCurrentView();
             },
