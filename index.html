@@ -403,21 +403,24 @@
                         row.className = 'block sm:table-row border-b sm:border-none mb-2 sm:mb-0 cursor-pointer hover:bg-gray-50';
                         
                         let indicatorHTML = '';
-                        if (person.indicator) {
+                        let childNumberContent = '';
+                        let childNumberDataLabel = 'Child #:';
+
+                        if (person.indicator) { // It's a spouse
+                            childNumberDataLabel = ''; // Hide label on mobile
                             if (person.parentId) {
                                 indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">${person.indicator} <a href="#" data-parent-id="${person.parentId}" class="text-blue-500 hover:underline view-parents-link">(view parents)</a></span>`;
                             } else {
                                 indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">${person.indicator}</span>`;
                             }
-                        }
-                        
-                        let childNumberHTML = '';
-                        if (!person.indicator) {
+                            // On mobile, this will be the only content in the childNumber cell
+                            childNumberContent = `<div class="sm:hidden">${indicatorHTML}</div>`; 
+                        } else { // It's a main person/child
                             const cnValue = person.childNumber;
                             const childNum = (typeof cnValue === 'object' && cnValue !== null && cnValue.low !== undefined) ? cnValue.low : cnValue;
                             const displayNum = (childNum === null || childNum === undefined) ? '' : childNum;
 
-                            childNumberHTML = `
+                            childNumberContent = `
                                 <div class="flex items-center gap-1" data-person-id="${person.id}" data-original-cn="${displayNum}">
                                     <input type="number" value="${displayNum}" class="w-16 p-1 border rounded-md bg-gray-100" disabled data-action-input="cn">
                                     <button class="text-xs text-blue-500 hover:underline" data-action="edit-cn">Edit</button>
@@ -448,7 +451,7 @@
                         row.innerHTML = `
                             <td data-label="ID:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-700">${person.id}</td>
                             <td data-label="Name:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-lg font-semibold text-gray-800">${person.name} <span class="hidden sm:inline">${indicatorHTML}</span></td>
-                            <td data-label="${person.indicator ? '' : 'Child #:'}" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${childNumberHTML}</td>
+                            <td data-label="${childNumberDataLabel}" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${childNumberContent}</td>
                             <td data-label="DOB:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${dobHTML}</td>
                             <td data-label="DOD:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${dodHTML}</td>
                         `;
@@ -842,7 +845,7 @@
 
                     if (type === 'modify') {
                         const oldId = relatedId;
-                        const oldChildNumber = initialData.childNumber ? String(initialData.childNumber) : '';
+                        const oldChildNumber = initialData.childNumber ? String(neo4j.integer.toString(initialData.childNumber)) : '';
                         const newChildNumber = formData.childNumber ? String(formData.childNumber) : '';
 
                         if (newChildNumber && oldChildNumber && newChildNumber !== oldChildNumber) {
