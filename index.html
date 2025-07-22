@@ -187,7 +187,7 @@
                         content: document.getElementById('details-modal-content'),
                         close: document.getElementById('details-modal-close'),
                         modify: document.getElementById('details-modal-modify'),
-                        viewChildren: document.getElementById('details-modal-view-children'), // Added this
+                        viewChildren: document.getElementById('details-modal-view-children'),
                     }
                 };
             },
@@ -264,7 +264,6 @@
                     this.closeDetailsModal();
                     this.modifyPerson(); // Re-use modifyPerson for the selected ID
                 });
-                // NEW: Event listener for View Children button in details modal
                 this.ui.detailsModal.viewChildren.addEventListener('click', () => {
                     this.closeDetailsModal();
                     this.viewChildren(); // This will use the currentPersonId set by showDetails
@@ -572,7 +571,6 @@
                     const div = document.createElement('div');
                     div.className = 'p-2 hover:bg-blue-100 cursor-pointer';
                     div.textContent = `${person.firstName || ''} ${person.lastName || ''} (${person.id})`;
-                    // The fix is here: calling showDetails
                     div.addEventListener('click', () => {
                         this.showDetails(person.id);
                         this.ui.searchInput.value = '';
@@ -635,14 +633,10 @@
                 this.ui.detailsModal.title.textContent = `Details for ${personData.firstName || ''} ${personData.lastName || ''}`;
                 this.currentPersonId = personId; // Set currentPersonId for modify/view children action from modal
 
-                // Enable/Disable "View Children" button based on whether children exist
-                if (children.length > 0) {
-                    this.ui.detailsModal.viewChildren.disabled = false;
-                    this.ui.detailsModal.viewChildren.classList.remove('btn-disabled');
-                } else {
-                    this.ui.detailsModal.viewChildren.disabled = true;
-                    this.ui.detailsModal.viewChildren.classList.add('btn-disabled');
-                }
+                // The "View Children" button should always be enabled, allowing navigation to an empty child list
+                this.ui.detailsModal.viewChildren.disabled = false;
+                this.ui.detailsModal.viewChildren.classList.remove('btn-disabled');
+
 
                 this.ui.detailsModal.container.classList.remove('hidden');
                 setTimeout(() => this.ui.detailsModal.container.style.opacity = 1, 10);
