@@ -518,7 +518,7 @@
                         let indicatorHTML = '';
                         let childNumberContent = '';
                         let childNumberDataLabel = 'Child #:';
-                        let nameClass = 'text-blue-800'; // Changed to blue for members
+                        let nameClass = 'text-blue-800'; // Default color for members
 
                         if (person.indicator) { // It's a spouse
                             childNumberDataLabel = ''; // Hide label on mobile
@@ -529,7 +529,7 @@
                             }
                             // On mobile, this will be the only content in the childNumber cell
                             childNumberContent = `<div class="sm:hidden">${indicatorHTML}</div>`; 
-                            nameClass = 'text-purple-700'; // Apply purple color for spouses
+                            nameClass = 'text-gray-700'; // Changed spouse color to a lighter gray
                         } else { // It's a main person/child
                             const cnValue = person.childNumber;
                             const childNum = (typeof cnValue === 'object' && cnValue !== null && cnValue.low !== undefined) ? cnValue.low : cnValue;
@@ -562,15 +562,31 @@
                             </div>
                         `;
 
+                        // View icon HTML - Adjusted to h-4 w-4
+                        const viewIconHTML = `
+                            <button class="view-details-icon ml-2 text-gray-500 hover:text-gray-700 focus:outline-none" data-person-id="${person.id}" title="View Details">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                    <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        `;
 
                         row.innerHTML = `
                             <td data-label="ID:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-700">${person.id}</td>
-                            <td data-label="Name:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-lg font-semibold ${nameClass}">${person.name} <span class="hidden sm:inline">${indicatorHTML}</span></td>
+                            <td data-label="Name:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-lg font-semibold ${nameClass}">${person.name} <span class="hidden sm:inline">${indicatorHTML}</span> ${viewIconHTML}</td>
                             <td data-label="${childNumberDataLabel}" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${childNumberContent}</td>
                             <td data-label="DOB:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${dobHTML}</td>
                             <td data-label="DOD:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${dodHTML}</td>
                         `;
                         row.addEventListener('click', (e) => {
+                            // If the click is on the view icon, handle it separately
+                            if (e.target.closest('.view-details-icon')) {
+                                e.stopPropagation(); // Prevent row selection
+                                const clickedPersonId = e.target.closest('.view-details-icon').dataset.personId;
+                                this.showDetails(clickedPersonId);
+                                return;
+                            }
                             if (e.target.classList.contains('view-parents-link')) {
                                 e.stopPropagation();
                                 const parentId = e.target.dataset.parentId;
@@ -582,7 +598,7 @@
                             this.onPersonSelect(person.id, person.name);
                         });
                         row.addEventListener('dblclick', (e) => {
-                               if (!e.target.classList.contains('view-parents-link')) {
+                               if (!e.target.classList.contains('view-parents-link') && !e.target.closest('.view-details-icon')) { // Exclude icon from dblclick to view children
                                    this.viewChildren();
                                  }
                         });
@@ -775,8 +791,8 @@
             },
 
             closeDetailsModal() {
-                this.ui.modal.container.style.opacity = 0;
-                setTimeout(() => this.ui.modal.container.classList.add('hidden'), 250);
+                this.ui.detailsModal.container.style.opacity = 0; // Corrected: target detailsModal
+                setTimeout(() => this.ui.detailsModal.container.classList.add('hidden'), 250); // Corrected: target detailsModal
             },
 
             // --- Actions (Add, Modify, etc.) ---
