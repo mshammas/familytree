@@ -126,6 +126,7 @@
                 <div id="details-modal-content" class="mt-4 px-7 py-3 text-base text-left">
                     </div>
                 <div class="items-center px-4 py-3 sm:flex">
+                    <button id="details-modal-view-children" class="btn btn-primary w-full sm:w-auto mb-2 sm:mb-0 sm:mr-2">View Children</button>
                     <div class="flex-grow"></div>
                     <button id="details-modal-close" class="btn btn-secondary w-full sm:w-auto mb-2 sm:mb-0 sm:mr-2">Close</button>
                     <button id="details-modal-modify" class="btn btn-primary w-full sm:w-auto">Modify Person</button>
@@ -186,6 +187,7 @@
                         content: document.getElementById('details-modal-content'),
                         close: document.getElementById('details-modal-close'),
                         modify: document.getElementById('details-modal-modify'),
+                        viewChildren: document.getElementById('details-modal-view-children'), // Added this
                     }
                 };
             },
@@ -261,6 +263,11 @@
                 this.ui.detailsModal.modify.addEventListener('click', () => {
                     this.closeDetailsModal();
                     this.modifyPerson(); // Re-use modifyPerson for the selected ID
+                });
+                // NEW: Event listener for View Children button in details modal
+                this.ui.detailsModal.viewChildren.addEventListener('click', () => {
+                    this.closeDetailsModal();
+                    this.viewChildren(); // This will use the currentPersonId set by showDetails
                 });
             },
 
@@ -576,7 +583,7 @@
                 this.ui.searchResults.classList.remove('hidden');
             },
 
-            // --- Details Modal Logic (NEW) ---
+            // --- Details Modal Logic ---
             async showDetails(personId) {
                 const query = `
                     MATCH (p:Person {id: $personId})
@@ -626,7 +633,17 @@
 
                 this.ui.detailsModal.content.innerHTML = detailsHtml;
                 this.ui.detailsModal.title.textContent = `Details for ${personData.firstName || ''} ${personData.lastName || ''}`;
-                this.currentPersonId = personId; // Set currentPersonId for modify action
+                this.currentPersonId = personId; // Set currentPersonId for modify/view children action from modal
+
+                // Enable/Disable "View Children" button based on whether children exist
+                if (children.length > 0) {
+                    this.ui.detailsModal.viewChildren.disabled = false;
+                    this.ui.detailsModal.viewChildren.classList.remove('btn-disabled');
+                } else {
+                    this.ui.detailsModal.viewChildren.disabled = true;
+                    this.ui.detailsModal.viewChildren.classList.add('btn-disabled');
+                }
+
                 this.ui.detailsModal.container.classList.remove('hidden');
                 setTimeout(() => this.ui.detailsModal.container.style.opacity = 1, 10);
             },
@@ -1047,13 +1064,13 @@
                     this.ui.modal.cancel.removeEventListener('click', closeModal);
                 };
                 
-                const viewChildrenBtn = document.getElementById('modal-view-children-btn');
-                const viewChildrenHandler = () => {
+                const modalViewChildrenBtn = document.getElementById('modal-view-children-btn');
+                const modalViewChildrenHandler = () => {
                     closeModal();
                     this._loadView('children', relatedId, true);
                 };
-                if (viewChildrenBtn) {
-                    viewChildrenBtn.addEventListener('click', viewChildrenHandler);
+                if (modalViewChildrenBtn) {
+                    modalViewChildrenBtn.addEventListener('click', modalViewChildrenHandler);
                 }
 
                 this.ui.modal.submit.addEventListener('click', submitHandler);
