@@ -518,6 +518,7 @@
                         let indicatorHTML = '';
                         let childNumberContent = '';
                         let childNumberDataLabel = 'Child #:';
+                        let nameClass = 'text-blue-800'; // Changed to blue for members
 
                         if (person.indicator) { // It's a spouse
                             childNumberDataLabel = ''; // Hide label on mobile
@@ -528,6 +529,7 @@
                             }
                             // On mobile, this will be the only content in the childNumber cell
                             childNumberContent = `<div class="sm:hidden">${indicatorHTML}</div>`; 
+                            nameClass = 'text-purple-700'; // Apply purple color for spouses
                         } else { // It's a main person/child
                             const cnValue = person.childNumber;
                             const childNum = (typeof cnValue === 'object' && cnValue !== null && cnValue.low !== undefined) ? cnValue.low : cnValue;
@@ -563,7 +565,7 @@
 
                         row.innerHTML = `
                             <td data-label="ID:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-700">${person.id}</td>
-                            <td data-label="Name:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-lg font-semibold text-gray-800">${person.name} <span class="hidden sm:inline">${indicatorHTML}</span></td>
+                            <td data-label="Name:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-lg font-semibold ${nameClass}">${person.name} <span class="hidden sm:inline">${indicatorHTML}</span></td>
                             <td data-label="${childNumberDataLabel}" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${childNumberContent}</td>
                             <td data-label="DOB:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${dobHTML}</td>
                             <td data-label="DOD:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4 whitespace-nowrap text-base text-gray-500">${dodHTML}</td>
@@ -838,7 +840,7 @@
                 const personData = personDataResult.p.properties;
 
                 const parentsResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN collect({id: p.id, name: trim(coalesce(p.firstName, "") + " " + coalesce(p.lastName, ""))}) as parents', { id: this.currentPersonId });
-                const parentsInfo = parentsResult.length > 0 ? parentsResult[0].parents : [];
+                const parentsInfo = parentsResult.length > 0 ? parentsInfo[0].parents : [];
                 
                 personData.parents = parentsInfo.map(p => p.id);
                 personData.parentNames = parentsInfo.map(p => p.name);
