@@ -773,8 +773,8 @@
             },
 
             closeDetailsModal() {
-                this.ui.detailsModal.container.style.opacity = 0;
-                setTimeout(() => this.ui.detailsModal.container.classList.add('hidden'), 250);
+                this.ui.modal.container.style.opacity = 0;
+                setTimeout(() => this.ui.modal.container.classList.add('hidden'), 250);
             },
 
             // --- Actions (Add, Modify, etc.) ---
@@ -879,7 +879,6 @@
                 const conflict = await this.runQuery('MATCH (p:Person {id: $id}) RETURN p', { id: newId });
                 if (conflict.length > 0) {
                     alert(`Error: A person with the new generated ID '${newId}' already exists. Please choose a different childNumber.`);
-                    this.refreshCurrentView();
                     return;
                 }
                 
@@ -973,26 +972,92 @@
                         this.ui.modal.form.insertAdjacentHTML('beforeend', genField);
                     }
                     
-                    if (type === 'child' && context.spouses && context.spouses.length > 0) {
-                        let spouseOptions = context.spouses.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join('');
-                        const spouseSelectorHTML = `
-                            <div>
-                                <label class="block text-base font-medium">Other Parent (Spouse)*</label>
-                                <select id="spouse-selector" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                                    ${spouseOptions}
-                                </select>
+                    // Logic for adding a child, including existing spouse selection for the PARENT
+                    if (type === 'child') {
+                        // Existing spouse selection dropdown for the PARENT
+                        let parentSpouseOptionsHTML = '';
+                        if (context.spouses && context.spouses.length > 0) {
+                            parentSpouseOptionsHTML = `
+                                <div id="parent-existing-spouse-section" class="mb-4">
+                                    <label class="block text-base font-medium">Other Parent (Existing Spouse of ${relatedId})</label>
+                                    <select id="parent-spouse-selector" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                        <option value="">-- Select an existing spouse --</option>
+                                        ${context.spouses.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join('')}
+                                    </select>
+                                </div>
+                            `;
+                        }
+                        this.ui.modal.form.insertAdjacentHTML('beforeend', parentSpouseOptionsHTML);
+
+                        // General schema fields for the main person (child)
+                        schema.forEach(key => {
+                            if (key === 'genNumber' || key === 'childNumber') return; // genNumber handled above, childNumber handled below
+                            const isMandatory = mandatoryKeys.includes(key);
+                            const label = `${key}${isMandatory ? '*' : ''}`;
+                            const value = initialData[key] || '';
+                            this.createFormField(this.ui.modal.form, key, label, value);
+                        });
+
+                        // Child Number field
+                        const childNumberField = `<div><label class="block text-base font-medium">childNumber*</label><input type="number" data-key="childNumber" class="mt-1 block w-full rounded-md border-gray-300"></div>`;
+                        this.ui.modal.form.insertAdjacentHTML('beforeend', childNumberField);
+
+                        // Section for adding new spouse(s) for the CHILD - MOVED TO END
+                        const childSpouseSectionHTML = `
+                            <div class="border-t pt-4 mt-4">
+                                <label class="block text-base font-medium text-gray-700 mb-2">Child's Spouse(s)</label>
+                                <div id="child-spouses-container" class="space-y-3">
+                                    <!-- New spouse fields will be dynamically added here -->
+                                </div>
+                                <button type="button" id="add-child-spouse-btn" class="mt-2 text-sm text-blue-600 hover:text-blue-800">+ Add Child's Spouse</button>
                             </div>
                         `;
-                        this.ui.modal.form.insertAdjacentHTML('beforeend', spouseSelectorHTML);
-                    }
+                        this.ui.modal.form.insertAdjacentHTML('beforeend', childSpouseSectionHTML);
 
-                    schema.forEach(key => {
-                        if (key === 'genNumber' && type !== 'modify') return;
-                        const isMandatory = mandatoryKeys.includes(key);
-                        const label = `${key}${isMandatory ? '*' : ''}`;
-                        const value = initialData[key] || '';
-                        this.createFormField(this.ui.modal.form, key, label, value);
-                    });
+                        const addChildSpouseBtn = this.ui.modal.form.querySelector('#add-child-spouse-btn');
+                        const childSpousesContainer = this.ui.modal.form.querySelector('#child-spouses-container');
+
+                        const addChildSpouseFields = () => {
+                            const spouseFieldsHtml = `
+                                <div class="flex flex-col sm:flex-row sm:items-end gap-2 p-3 border rounded-md bg-gray-50" data-child-spouse-entry>
+                                    <div class="flex-grow">
+                                        <label class="block text-sm font-medium">First Name*</label>
+                                        <input type="text" data-key="childSpouseFirstName" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                    </div>
+                                    <div class="flex-grow">
+                                        <label class="block text-sm font-medium">Last Name</label>
+                                        <input type="text" data-key="childSpouseLastName" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium">Gender*</label>
+                                        <select data-key="childSpouseGender" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                            <option value=""></option>
+                                            <option value="M">M</option>
+                                            <option value="F">F</option>
+                                        </select>
+                                    </div>
+                                    <button type="button" class="btn bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-2 rounded-md self-center sm:self-end remove-child-spouse-btn">Remove</button>
+                                </div>
+                            `;
+                            childSpousesContainer.insertAdjacentHTML('beforeend', spouseFieldsHtml);
+                        };
+
+                        addChildSpouseBtn.addEventListener('click', addChildSpouseFields);
+                        childSpousesContainer.addEventListener('click', (e) => {
+                            if (e.target.classList.contains('remove-child-spouse-btn')) {
+                                e.target.closest('[data-child-spouse-entry]').remove();
+                            }
+                        });
+                    } else { // For add new person (top-level) or add sibling
+                        // General schema fields for the main person (sibling or new top-level)
+                        schema.forEach(key => {
+                            if (key === 'genNumber' && type !== 'modify') return;
+                            const isMandatory = mandatoryKeys.includes(key);
+                            const label = `${key}${isMandatory ? '*' : ''}`;
+                            const value = initialData[key] || '';
+                            this.createFormField(this.ui.modal.form, key, label, value);
+                        });
+                    }
 
                     if (type === 'modify') {
                         const parentSectionHTML = `
@@ -1042,33 +1107,46 @@
                 setTimeout(() => this.ui.modal.container.style.opacity = 1, 10);
 
                 const submitHandler = async () => {
-                    const isExistingSpouse = document.getElementById('existing-spouse-checkbox')?.checked;
-                    if (isExistingSpouse) {
-                        const existingSpouseId = document.getElementById('existing-spouse-id').value;
-                        if (!existingSpouseId) {
-                            alert('Please enter the ID of the existing spouse.');
-                            return;
-                        }
-                        await this.runQuery('MATCH (p1:Person {id: $p1Id}), (p2:Person {id: $p2Id}) MERGE (p1)-[:SPOUSE_OF]-(p2)', { p1Id: relatedId, p2Id: existingSpouseId });
-                        alert('Spouses linked successfully!');
-                        closeModal();
-                        this.refreshCurrentView();
-                        return;
-                    }
-
+                    // Collect main person's form data
                     const formData = {};
                     let newId = (type === 'modify') ? relatedId : null;
                     
-                    this.ui.modal.form.querySelectorAll('[data-key], input:disabled[value]').forEach(input => {
-                        const key = input.dataset.key || 'genNumber';
-                        let value = input.value;
+                    this.ui.modal.form.querySelectorAll('[data-key]').forEach(input => {
+                        const key = input.dataset.key;
+                        // Skip spouse fields that are part of the child's spouse dynamic section
+                        if (key && (key.startsWith('childSpouseFirstName') || key.startsWith('childSpouseLastName') || key.startsWith('childSpouseGender'))) {
+                            return;
+                        }
 
+                        let value = input.value;
                         if ((key === 'genNumber' || key === 'childNumber') && value) {
                             formData[key] = parseInt(value, 10);
-                        } else {
+                        } else if (key) { // Ensure key exists before assigning
                             formData[key] = value;
                         }
                     });
+
+                    // Handle new child's spouses
+                    const newChildSpousesDetails = [];
+                    if (type === 'child') {
+                        const childSpouseEntries = document.querySelectorAll('#child-spouses-container [data-child-spouse-entry]');
+                        for (const entry of childSpouseEntries) {
+                            const spouseFirstName = entry.querySelector('[data-key="childSpouseFirstName"]').value.trim();
+                            const spouseLastName = entry.querySelector('[data-key="childSpouseLastName"]').value.trim();
+                            const spouseGender = entry.querySelector('[data-key="childSpouseGender"]').value.trim();
+
+                            if (!spouseFirstName || !spouseGender) { // LastName is now optional
+                                alert('Please provide First Name and Gender for all new child spouses, or remove incomplete entries.');
+                                return;
+                            }
+                            newChildSpousesDetails.push({
+                                firstName: spouseFirstName,
+                                lastName: spouseLastName, // Can be empty
+                                gender: spouseGender
+                            });
+                        }
+                    }
+
 
                     if (type === 'modify') {
                         const oldId = relatedId;
@@ -1136,7 +1214,7 @@
                             await this.runQuery(`MATCH (p:Person {id: $oldId}) ${setClause} ${removeClause}`, { oldId: oldId, propsToSet: propsToSet });
                         }
                         
-                    } else { // Logic for creating new person
+                    } else { // Logic for creating new person (child, sibling, spouse)
                         if (type === 'child' || type === 'sibling') {
                             const childNumber = formData.childNumber;
                             if (!childNumber) {
@@ -1164,15 +1242,33 @@
                             return;
                         }
 
-                        const props = Object.fromEntries(Object.entries(formData).filter(([_, v]) => v !== ''));
+                        const props = Object.fromEntries(Object.entries(formData).filter(([k, v]) => v !== ''));
                         await this.runQuery('CREATE (p:Person {id: $id}) SET p += $props', { id: newId, props });
                         
-                        if (type === 'child') {
-                            const parentIds = [relatedId];
-                            const spouseSelector = document.getElementById('spouse-selector');
-                            if (spouseSelector && spouseSelector.value) {
-                                parentIds.push(spouseSelector.value);
+                        // Handle new child's spouses
+                        if (type === 'child' && newChildSpousesDetails.length > 0) {
+                            let spouseCounter = 1;
+                            for (const spouseDetail of newChildSpousesDetails) {
+                                const newSpouseId = `${newId}_sp${spouseCounter++}`; // e.g., childID_sp1, childID_sp2
+                                const spouseProps = {
+                                    id: newSpouseId,
+                                    firstName: spouseDetail.firstName,
+                                    lastName: spouseDetail.lastName,
+                                    gender: spouseDetail.gender,
+                                    genNumber: formData.genNumber // Child's spouse is in the same generation as the child
+                                };
+                                await this.runQuery('CREATE (s:Person {id: $id}) SET s += $props', { id: newSpouseId, props: spouseProps });
+                                await this.runQuery('MATCH (p1:Person {id: $p1Id}), (p2:Person {id: $p2Id}) MERGE (p1)-[:SPOUSE_OF]-(p2)', { p1Id: newId, p2Id: newSpouseId });
                             }
+                        }
+
+                        if (type === 'child') {
+                            const parentIds = [relatedId]; // The person selected to add child to
+                            const parentSpouseSelector = document.getElementById('parent-spouse-selector');
+                            if (parentSpouseSelector && parentSpouseSelector.value) {
+                                parentIds.push(parentSpouseSelector.value); // Add existing spouse of parent if selected
+                            }
+                            
                             for (const parentId of parentIds) {
                                 await this.runQuery('MATCH (c:Person {id: $childId}), (p:Person {id: $parentId}) MERGE (c)-[:CHILD_OF]->(p)', { childId: newId, parentId: parentId });
                             }
@@ -1182,6 +1278,7 @@
                                     await this.runQuery('MATCH (c:Person {id: $childId}), (p:Person {id: $parentId}) MERGE (c)-[:CHILD_OF]->(p)', { childId: newId, parentId: parent.id });
                                }
                         } else if (type === 'spouse') {
+                            // This path is for adding a spouse directly using the 'Add Spouse' button, not from 'Add Person' form
                             await this.runQuery('MATCH (p1:Person {id: $p1Id}), (p2:Person {id: $p2Id}) MERGE (p1)-[:SPOUSE_OF]-(p2)', { p1Id: newId, p2Id: relatedId });
                         }
                     }
@@ -1248,3 +1345,4 @@
     </script>
 </body>
 </html>
+
