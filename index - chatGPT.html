@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maliyakkal Family Tree</title>
+  <!-- Tailwind CSS for styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Neo4j JavaScript Driver (browser bundle) -->
+  <!-- <script src="https://unpkg.com/neo4j-driver/dist/neo4j-browser.min.js"></script> -->
+<!-- unpkg minified browser build (replace 5.28.1 with whatever latest you need) -->
+  <script src="https://unpkg.com/neo4j-driver@5.28.1/lib/browser/neo4j-web.min.js"></script>
+
+  <!-- Tell Tailwind to process @apply here -->
+  <style type="text/tailwindcss">
+    /* Simple transition for modals */
+    .modal { @apply transition-opacity ease-in-out duration-200; }
+
+    /* Button base styles */
+    .btn {
+      @apply px-4 py-2 rounded-md font-semibold text-white shadow-md
+             transition-transform transform hover:scale-105 focus:outline-none
+             focus:ring-2 focus:ring-offset-2;
+    }
+    .btn-primary { @apply bg-blue-600 hover:bg-blue-700 focus:ring-blue-500; }
+    .btn-secondary { @apply bg-gray-500 hover:bg-gray-600 focus:ring-gray-400; }
+    .btn-disabled { @apply bg-gray-300 cursor-not-allowed hover:scale-100; }
+
+    /* Mobile table labels */
+    @media (max-width: 640px) {
+      #person-list td:before {
+        content: attr(data-label);
+        @apply font-semibold inline-block text-gray-600 w-28 flex-shrink-0;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <div id="app" class="container mx-auto p-2 sm:p-4 max-w-7xl">
+
+    <!-- Connection Screen -->
+    <div id="connection-screen" class="flex items-center justify-center min-h-screen">
+      <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">
+          Connect to Neo4j Database
+        </h1>
+        <div class="space-y-4">
+          <div>
+            <label for="uri" class="block text-sm font-medium text-gray-700">Database URI</label>
+            <input type="text" id="uri" value="neo4j+s://51ac777b.databases.neo4j.io"
+                   class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm
+                          placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+          </div>
+          <div>
+            <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+            <input type="password" id="password"
+                   class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm
+                          placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+          </div>
+          <button id="connect-btn" class="w-full btn btn-primary">Connect</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Application Screen -->
+    <div id="main-app" class="hidden">
+      <header class="bg-white p-4 rounded-lg shadow-md mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">Maliyakkal Family Tree</h1>
+        <button id="enter-edit-mode-btn" class="btn btn-primary ml-auto">Enter Edit Mode</button>
+        <p id="current-selection-label" class="text-gray-600 italic mt-1 w-full">Current Selection: None</p>
+      </header>
+
+      <!-- Search Bar -->
+      <div class="relative mb-4">
+        <input type="text" id="search-input" placeholder="Search for a person..."
+               class="w-full p-3 rounded-lg shadow-md border border-gray-200
+                      focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <div id="search-results" class="absolute z-10 w-full bg-white border border-gray-200
+                                        rounded-b-lg shadow-lg mt-1 hidden"></div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="bg-white p-3 rounded-lg shadow-md mb-4 flex flex-col sm:flex-row items-center gap-y-2">
+        <div class="flex flex-row flex-wrap justify-center items-center">
+          <button id="add-child-btn" class="btn btn-primary btn-disabled mx-1" disabled>Add Child</button>
+          <span class="text-gray-300 font-light">|</span>
+          <button id="add-sibling-btn" class="btn btn-primary btn-disabled mx-1" disabled>Add Sibling</button>
+          <span class="text-gray-300 font-light">|</span>
+          <button id="add-spouse-btn" class="btn btn-primary btn-disabled mx-1" disabled>Add Spouse</button>
+        </div>
+        <div class="flex flex-row flex-wrap justify-center items-center w-full sm:w-auto
+                    border-t sm:border-t-0 sm:border-l border-gray-200 pt-2 sm:pt-0 sm:pl-4">
+          <button id="modify-btn" class="btn btn-secondary btn-disabled mx-1" disabled>Modify Person</button>
+          <span class="text-gray-300 font-light">|</span>
+          <button id="view-children-btn" class="btn btn-secondary btn-disabled mx-1" disabled>View Children</button>
+        </div>
+        <div class="flex-grow"></div>
+        <div class="flex flex-row flex-wrap justify-center items-center w-full sm:w-auto
+                    border-t sm:border-t-0 sm:border-l border-gray-200 pt-2 sm:pt-0 sm:pl-4">
+          <button id="back-btn" class="btn btn-secondary btn-disabled mx-1" disabled>Go Back</button>
+          <span class="text-gray-300 font-light">|</span>
+          <button id="top-gen-btn" class="btn btn-secondary mx-1">Go to Top Generation</button>
+        </div>
+      </div>
+
+      <!-- Person List -->
+      <div class="bg-white rounded-lg shadow-md overflow-hidden">
+        <table class="min-w-full">
+          <thead id="person-list-header" class="bg-gray-50 hidden sm:table-header-group">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Child #</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DOB</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DOD</th>
+            </tr>
+          </thead>
+          <tbody id="person-list" class="bg-white">
+            <!-- Rows inserted by JavaScript -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal for Forms -->
+  <div id="modal"
+       class="modal fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden"
+       style="opacity: 0;">
+    <div class="relative top-10 sm:top-20 mx-auto p-5 max-w-lg shadow-lg rounded-md bg-white">
+      <div class="text-center">
+        <h3 id="modal-title" class="text-lg font-medium text-gray-900 mb-4">Add Person</h3>
+        <div id="modal-form" class="space-y-4 text-left">
+          <!-- Form fields inserted by JavaScript -->
+        </div>
+        <div class="mt-4 space-x-2">
+          <button id="modal-submit" class="btn btn-primary">Submit</button>
+          <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Details View -->
+  <div id="details-modal"
+       class="modal fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden"
+       style="opacity: 0;">
+    <div class="relative top-10 sm:top-20 mx-auto p-5 max-w-lg shadow-lg rounded-md bg-white">
+      <div class="mt-3">
+        <h3 id="details-modal-title" class="text-xl text-center leading-6 font-bold text-gray-900">
+          Person Details
+        </h3>
+        <div id="details-modal-content" class="mt-4 px-7 py-3 text-base text-left">
+          <!-- Details inserted by JavaScript -->
+        </div>
+        <div class="flex flex-col sm:flex-row sm:justify-end sm:space-x-2 mt-6">
+          <button id="details-modal-view-children" class="btn btn-primary w-full sm:w-auto mb-2 sm:mb-0">
+            View Children
+          </button>
+          <button id="details-modal-close" class="btn btn-secondary w-full sm:w-auto mb-2 sm:mb-0">
+            Close
+          </button>
+          <button id="details-modal-modify" class="btn btn-primary w-full sm:w-auto">
+            Modify Person
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const App = {
+      driver: null,
+      dbName: 'neo4j',
+      currentPersonId: null,
+      editModeEnabled: false,
+      viewMode: 'generation',
+      viewContextId: 1,
+      viewHistory: [],
+
+      init() {
+        this.cacheElements();
+        this.bindEvents();
+        this.toggleEditMode(false);
+      },
+
+      cacheElements() {
+        this.ui = {
+          connectionScreen: document.getElementById('connection-screen'),
+          mainApp: document.getElementById('main-app'),
+          uriInput: document.getElementById('uri'),
+          passwordInput: document.getElementById('password'),
+          connectBtn: document.getElementById('connect-btn'),
+          selectionLabel: document.getElementById('current-selection-label'),
+          personList: document.getElementById('person-list'),
+          personListHeader: document.getElementById('person-list-header'),
+          searchInput: document.getElementById('search-input'),
+          searchResults: document.getElementById('search-results'),
+          buttons: {
+            addChild: document.getElementById('add-child-btn'),
+            addSibling: document.getElementById('add-sibling-btn'),
+            addSpouse: document.getElementById('add-spouse-btn'),
+            modify: document.getElementById('modify-btn'),
+            viewChildren: document.getElementById('view-children-btn'),
+            back: document.getElementById('back-btn'),
+            topGen: document.getElementById('top-gen-btn'),
+            enterEditMode: document.getElementById('enter-edit-mode-btn'),
+          },
+          modal: {
+            container: document.getElementById('modal'),
+            title: document.getElementById('modal-title'),
+            form: document.getElementById('modal-form'),
+            submit: document.getElementById('modal-submit'),
+            cancel: document.getElementById('modal-cancel'),
+          },
+          detailsModal: {
+            container: document.getElementById('details-modal'),
+            title: document.getElementById('details-modal-title'),
+            content: document.getElementById('details-modal-content'),
+            close: document.getElementById('details-modal-close'),
+            modify: document.getElementById('details-modal-modify'),
+            viewChildren: document.getElementById('details-modal-view-children'),
+          }
+        };
+      },
+
+      bindEvents() {
+        // Connection
+        this.ui.connectBtn.addEventListener('click', () => this.connect());
+        this.ui.passwordInput.addEventListener('keydown', e => {
+          if (e.key === 'Enter') this.connect();
+        });
+
+        // Navigation
+        this.ui.buttons.topGen.addEventListener('click', () => this.go_to_top_generation());
+        this.ui.buttons.back.addEventListener('click', () => this.goBack());
+        this.ui.buttons.viewChildren.addEventListener('click', () => this.viewChildren());
+
+        // Actions
+        this.ui.buttons.addChild.addEventListener('click', () => this.addChild());
+        this.ui.buttons.addSibling.addEventListener('click', () => this.addSibling());
+        this.ui.buttons.addSpouse.addEventListener('click', () => this.addSpouse());
+        this.ui.buttons.modify.addEventListener('click', () => this.modifyPerson());
+        this.ui.buttons.enterEditMode.addEventListener('click', () => this.handleEditModeToggle());
+
+        // Search
+        this.ui.searchInput.addEventListener('input', e => this.handleSearch(e.target.value));
+
+        // Inline editing & selection
+        this.ui.personList.addEventListener('click', e => {
+          const action = e.target.dataset.action;
+          if (!action) return;
+          if (!this.editModeEnabled) {
+            alert("Please enter Edit Mode to make changes.");
+            return;
+          }
+          const parts = action.split('-');
+          const type = parts[0], prop = parts[1];
+          const container = e.target.closest('[data-person-id]');
+          const personId = container.dataset.personId;
+          const input = container.querySelector(`[data-action-input="${prop}"]`);
+          const originalValue = container.dataset.originalValue;
+          const editBtn = container.querySelector(`[data-action="edit-${prop}"]`);
+          const saveBtn = container.querySelector(`[data-action="save-${prop}"]`);
+          const cancelBtn = container.querySelector(`[data-action="cancel-${prop}"]`);
+
+          if (type === 'edit') {
+            input.disabled = false;
+            input.classList.remove('bg-gray-100');
+            input.focus();
+            editBtn.classList.add('hidden');
+            saveBtn.classList.remove('hidden');
+            cancelBtn.classList.remove('hidden');
+          } else if (type === 'cancel') {
+            input.value = originalValue;
+            input.disabled = true;
+            input.classList.add('bg-gray-100');
+            editBtn.classList.remove('hidden');
+            saveBtn.classList.add('hidden');
+            cancelBtn.classList.add('hidden');
+          } else if (type === 'save') {
+            if (prop === 'cn') {
+              this.saveChildNumber(personId, input.value, originalValue);
+            } else {
+              this.saveProperty(personId, prop, input.value);
+            }
+          }
+        });
+
+        // Parent-link clicks in header
+        this.ui.selectionLabel.addEventListener('click', e => {
+          if (e.target.classList.contains('view-parents-link')) {
+            e.preventDefault();
+            const parentId = e.target.dataset.parentId;
+            this._loadView('children', parentId, true);
+          }
+        });
+
+        // Details modal close & view children
+        this.ui.detailsModal.close.addEventListener('click', () => this.closeDetailsModal());
+        this.ui.detailsModal.viewChildren.addEventListener('click', () => {
+          this.closeDetailsModal();
+          this.viewChildren();
+        });
+
+        // Single delegated listener inside details modal
+        this.ui.detailsModal.container.addEventListener('click', e => {
+          const link = e.target.closest('.view-details-link');
+          if (link) {
+            e.preventDefault();
+            e.stopPropagation();
+            const nextId = link.dataset.personId;
+            this.closeDetailsModal();
+            this.showDetails(nextId);
+            return;
+          }
+          const modifyBtn = e.target.closest('#details-modal-modify');
+          if (modifyBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!this.editModeEnabled) {
+              alert("Please enter Edit Mode to modify persons.");
+              return;
+            }
+            this.closeDetailsModal();
+            this.modifyPerson(this.currentPersonId);
+          }
+        });
+      },
+
+      handleEditModeToggle() {
+        if (this.editModeEnabled) {
+          this.toggleEditMode(false);
+          alert("Edit mode disabled.");
+        } else {
+          const pwd = prompt("Enter password to enable edit mode:");
+          if (pwd === "Maliyakkal") {
+            this.toggleEditMode(true);
+            alert("Edit mode enabled!");
+          } else if (pwd !== null) {
+            alert("Incorrect password.");
+          }
+        }
+      },
+
+      toggleEditMode(enable) {
+        this.editModeEnabled = enable;
+        const editable = [
+          this.ui.buttons.addChild,
+          this.ui.buttons.addSibling,
+          this.ui.buttons.addSpouse,
+          this.ui.buttons.modify,
+          this.ui.detailsModal.modify
+        ];
+        editable.forEach(btn => {
+          if (!btn) return;
+          btn.disabled = !enable;
+          btn.classList.toggle('btn-disabled', !enable);
+        });
+
+        const emBtn = this.ui.buttons.enterEditMode;
+        emBtn.textContent = enable ? "Exit Edit Mode" : "Enter Edit Mode";
+        emBtn.classList.toggle('bg-red-600', enable);
+        emBtn.classList.toggle('hover:bg-red-700', enable);
+        emBtn.classList.toggle('focus:ring-red-500', enable);
+        emBtn.classList.toggle('bg-blue-600', !enable);
+        emBtn.classList.toggle('hover:bg-blue-700', !enable);
+        emBtn.classList.toggle('focus:ring-blue-500', !enable);
+
+        if (this.currentPersonId) {
+          this.onPersonSelect(this.currentPersonId, this.ui.selectionLabel.textContent);
+        } else {
+          this.resetButtons();
+        }
+      },
+
+      async connect() {
+        const uri = this.ui.uriInput.value;
+        const pwd = this.ui.passwordInput.value;
+        if (!uri || !pwd) {
+          alert('Please provide both URI and password.');
+          return;
+        }
+        this.ui.connectBtn.textContent = 'Connecting…';
+        this.ui.connectBtn.disabled = true;
+        try {
+          this.driver = neo4j.driver(uri, neo4j.auth.basic('neo4j', pwd));
+          await this.driver.verifyConnectivity();
+          this.ui.connectionScreen.classList.add('hidden');
+          this.ui.mainApp.classList.remove('hidden');
+          this.go_to_top_generation();
+        } catch (err) {
+          console.error(err);
+          alert(`Connection failed: ${err.message}`);
+        } finally {
+          this.ui.connectBtn.textContent = 'Connect';
+          this.ui.connectBtn.disabled = false;
+        }
+      },
+
+      async runQuery(q, params = {}) {
+        if (!this.driver) return [];
+        const session = this.driver.session({ database: this.dbName });
+        try {
+          const res = await session.run(q, params);
+          return res.records.map(r => r.toObject());
+        } catch (err) {
+          console.error(err);
+          alert(`Database error: ${err.message}`);
+          return [];
+        } finally {
+          await session.close();
+        }
+      },
+
+      async _loadView(mode, contextId, addToHistory) {
+        if (addToHistory) {
+          this.viewHistory.push({ mode: this.viewMode, contextId: this.viewContextId });
+        }
+        this.viewMode = mode;
+        this.viewContextId = contextId;
+        if (mode === 'children') {
+          await this._displayChildrenInternal(contextId);
+        } else {
+          await this._displayTopGenInternal();
+        }
+        this.ui.buttons.back.disabled = this.viewHistory.length === 0;
+      },
+
+      async _displayTopGenInternal() {
+        const query = `
+          CALL {
+            MATCH (p:Person) WHERE toInteger(p.genNumber)=1
+            OPTIONAL MATCH (p)-[:SPOUSE_OF]-(s:Person)
+              WHERE toInteger(s.genNumber)=1
+            WITH p,s WHERE s IS NULL OR id(p)<id(s)
+            RETURN p AS person, '' AS indicator, p.id AS sortKey, 0 AS isSpouse, p.childNumber AS childNumber
+            UNION
+            MATCH (p:Person)-[:SPOUSE_OF]-(s:Person)
+              WHERE toInteger(p.genNumber)=1 AND toInteger(s.genNumber)=1 AND id(p)>id(s)
+            RETURN p AS person,
+                   '(Spouse of '+s.firstName+')' AS indicator,
+                   s.id AS sortKey, 1 AS isSpouse, NULL AS childNumber
+          }
+          RETURN person.id AS id,
+                 trim(coalesce(person.firstName,'')+' '+coalesce(person.lastName,'')) AS name,
+                 coalesce(person.dob,'Not Set') AS dob,
+                 coalesce(person.dod,'N/A') AS dod,
+                 indicator,
+                 childNumber
+          ORDER BY sortKey, isSpouse
+        `;
+        const people = await this.runQuery(query);
+        this.renderPersonList(people, 'Displaying Top Generation');
+      },
+
+      async _displayChildrenInternal(parentId) {
+        const parentInfoRes = await this.runQuery(
+          `MATCH (p:Person {id:$id})
+           OPTIONAL MATCH (p)-[:CHILD_OF]->(gp:Person)
+           RETURN p.firstName AS firstName,
+                  p.lastName AS lastName,
+                  collect(DISTINCT {id:gp.id,name:trim(coalesce(gp.firstName,'')+' '+coalesce(gp.lastName,''))}) as grandParents`,
+          { id: parentId }
+        );
+        const pi = parentInfoRes[0] || { firstName:'', lastName:'', grandParents:[] };
+        const parentName = `${pi.firstName||''} ${pi.lastName||''}`.trim();
+        let label = `Children of: ${parentName}`;
+        if (pi.grandParents.length>0 && pi.grandParents[0].id) {
+          const gpLinks = pi.grandParents
+            .map(gp=>`<a href="#" data-parent-id="${gp.id}" class="text-blue-500 hover:underline view-parents-link">${gp.name||gp.id}</a>`)
+            .join(', ');
+          label += ` <span class="text-sm">(Parents: ${gpLinks})</span>`;
+        }
+
+        const query = `
+          CALL {
+            MATCH (parent:Person {id:$parentId})<-[:CHILD_OF]-(child:Person)
+            RETURN child AS person,'' AS indicator,child.id AS sortKey,0 AS isSpouse,child.childNumber AS childNumber
+            UNION
+            MATCH (parent:Person {id:$parentId})<-[:CHILD_OF]-(child:Person)-[:SPOUSE_OF]-(sp:Person)
+              WHERE NOT (sp)-[:CHILD_OF]->(parent)
+            WITH sp,child
+            OPTIONAL MATCH (sp)-[:CHILD_OF]->(spP:Person)
+            WITH sp,child,collect(spP.id)[0] AS firstParentId
+            RETURN sp AS person,'(Spouse of '+child.firstName+')' AS indicator,
+                   child.id AS sortKey,1 AS isSpouse,firstParentId AS parentId,NULL AS childNumber
+          }
+          RETURN person.id AS id,
+                 trim(coalesce(person.firstName,'')+' '+coalesce(person.lastName,'')) AS name,
+                 coalesce(person.dob,'Not Set') AS dob,
+                 coalesce(person.dod,'N/A') AS dod,
+                 indicator,
+                 parentId,
+                 childNumber
+          ORDER BY sortKey,isSpouse
+        `;
+        const data = await this.runQuery(query, { parentId });
+        this.renderPersonList(data, label);
+      },
+
+      renderPersonList(people, label) {
+        this.ui.personList.innerHTML = '';
+        this.resetButtons();
+        if (label) this.ui.selectionLabel.innerHTML = label;
+
+        this.ui.personListHeader.innerHTML = `
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Child #</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DOB</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DOD</th>
+          </tr>
+        `;
+
+        if (people.length === 0) {
+          const r = document.createElement('tr');
+          r.innerHTML = `<td colspan="5" class="block sm:table-cell px-6 py-4 text-center text-gray-500">
+                           No people found.
+                         </td>`;
+          this.ui.personList.appendChild(r);
+        } else {
+          people.forEach(person => {
+            const row = document.createElement('tr');
+            row.className = 'block sm:table-row border-b sm:border-none mb-2 sm:mb-0 cursor-pointer hover:bg-blue-50';
+
+            // Indicator (spouse) vs childNumber logic
+            let indicatorHTML = '', childNumHTML = '', childLabel = 'Child #:';
+            let nameClass = 'text-gray-800';
+            if (person.indicator) {
+              childLabel = '';
+              if (person.parentId) {
+                indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">
+                                   ${person.indicator}
+                                   <a href="#" data-parent-id="${person.parentId}"
+                                      class="text-blue-500 hover:underline view-parents-link">
+                                     ${person.parentId}
+                                   </a>
+                                 </span>`;
+              } else {
+                indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">
+                                   ${person.indicator}
+                                 </span>`;
+              }
+              childNumHTML = `<div class="sm:hidden">${indicatorHTML}</div>`;
+              nameClass = 'text-purple-700';
+            } else {
+              const cnVal = person.childNumber;
+              const num = (typeof cnVal==='object'&&cnVal!==null&&cnVal.low!==undefined)?cnVal.low:cnVal;
+              const disp = num==null?'':num;
+              childNumHTML = `
+                <div class="flex items-center gap-1" data-person-id="${person.id}"
+                     data-original-value="${disp}">
+                  <input type="number" value="${disp}"
+                         class="w-16 p-1 border rounded-md bg-gray-100"
+                         disabled data-action-input="cn">
+                  <button data-action="edit-cn"
+                          class="text-xs text-blue-500 hover:underline">Edit</button>
+                  <button data-action="save-cn"
+                          class="text-xs text-green-500 hover:underline hidden">Save</button>
+                  <button data-action="cancel-cn"
+                          class="text-xs text-red-500 hover:underline hidden">Cancel</button>
+                </div>`;
+            }
+
+            // DOB & DOD inputs
+            const dobHTML = `
+              <div class="flex items-center gap-1" data-person-id="${person.id}"
+                   data-original-value="${person.dob}">
+                <input type="text" value="${person.dob}"
+                       class="w-28 p-1 border rounded-md bg-gray-100"
+                       disabled data-action-input="dob">
+                <button data-action="edit-dob"
+                        class="text-xs text-blue-500 hover:underline">Edit</button>
+                <button data-action="save-dob"
+                        class="text-xs text-green-500 hover:underline hidden">Save</button>
+                <button data-action="cancel-dob"
+                        class="text-xs text-red-500 hover:underline hidden">Cancel</button>
+              </div>`;
+            const dodHTML = `
+              <div class="flex items-center gap-1" data-person-id="${person.id}"
+                   data-original-value="${person.dod}">
+                <input type="text" value="${person.dod}"
+                       class="w-28 p-1 border rounded-md bg-gray-100"
+                       disabled data-action-input="dod">
+                <button data-action="edit-dod"
+                        class="text-xs text-blue-500 hover:underline">Edit</button>
+                <button data-action="save-dod"
+                        class="text-xs text-green-500 hover:underline hidden">Save</button>
+                <button data-action="cancel-dod"
+                        class="text-xs text-red-500 hover:underline hidden">Cancel</button>
+              </div>`;
+
+            const viewIcon = `
+              <button title="View Details" data-person-id="${person.id}"
+                      class="view-details-icon ml-2 text-gray-500 hover:text-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block"
+                     viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                  <path fill-rule="evenodd"
+                        d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7
+                           c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10z
+                           M14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                        clip-rule="evenodd" />
+                </svg>
+              </button>`;
+
+            row.innerHTML = `
+              <td data-label="ID:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4
+                                        whitespace-nowrap text-sm font-medium text-gray-700">
+                ${person.id}
+              </td>
+              <td data-label="Name:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4
+                                          whitespace-nowrap text-lg font-semibold ${nameClass}">
+                ${person.name}
+                <span class="hidden sm:inline">${indicatorHTML}</span>
+                ${viewIcon}
+              </td>
+              <td data-label="${childLabel}" class="flex items-center sm:table-cell px-6 py-2 sm:py-4
+                                                   whitespace-nowrap text-base text-gray-500">
+                ${childNumHTML}
+              </td>
+              <td data-label="DOB:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4
+                                           whitespace-nowrap text-base text-gray-500">
+                ${dobHTML}
+              </td>
+              <td data-label="DOD:" class="flex items-center sm:table-cell px-6 py-2 sm:py-4
+                                           whitespace-nowrap text-base text-gray-500">
+                ${dodHTML}
+              </td>`;
+
+            // View icon click
+            row.querySelector('.view-details-icon').addEventListener('click', e => {
+              e.stopPropagation();
+              this.showDetails(person.id);
+            });
+
+            // Row click = selection
+            row.addEventListener('click', e => {
+              if (e.target.closest('.view-details-icon')) return;
+              if (e.target.classList.contains('view-parents-link')) {
+                e.stopPropagation();
+                this._loadView('children', e.target.dataset.parentId, true);
+                return;
+              }
+              this.ui.personList.querySelectorAll('tr').forEach(r => r.classList.remove('bg-blue-100'));
+              row.classList.add('bg-blue-100');
+              this.onPersonSelect(person.id, person.name);
+            });
+
+            // Double-click to view children
+            row.addEventListener('dblclick', e => {
+              if (!e.target.closest('.view-parents-link') &&
+                  !e.target.closest('.view-details-icon')) {
+                this.viewChildren();
+              }
+            });
+
+            this.ui.personList.appendChild(row);
+          });
+        }
+
+        // If viewing children, enable addChild etc.
+        if (this.viewMode === 'children') {
+          this.currentPersonId = this.viewContextId;
+          const en = this.editModeEnabled;
+          [ 'addChild','addSpouse' ].forEach(id => {
+            const btn = this.ui.buttons[id];
+            btn.disabled = !en;
+            btn.classList.toggle('btn-disabled', !en);
+          });
+          this.ui.selectionLabel.innerHTML +=
+            `<span class="italic text-gray-500">. Actions apply to parent.</span>`;
+        }
+      },
+
+      onPersonSelect(id, name) {
+        this.currentPersonId = id;
+        this.ui.selectionLabel.textContent = `Selected: ${name} (ID: ${id})`;
+        this.ui.buttons.viewChildren.disabled = false;
+        this.ui.buttons.viewChildren.classList.remove('btn-disabled');
+        if (this.editModeEnabled) {
+          ['addChild','addSibling','addSpouse','modify'].forEach(key => {
+            const b = this.ui.buttons[key];
+            b.disabled = false;
+            b.classList.remove('btn-disabled');
+          });
+        } else {
+          ['addChild','addSibling','addSpouse','modify'].forEach(key => {
+            const b = this.ui.buttons[key];
+            b.disabled = true;
+            b.classList.add('btn-disabled');
+          });
+        }
+      },
+
+      resetButtons() {
+        this.currentPersonId = null;
+        this.ui.selectionLabel.textContent = 'Current Selection: None';
+        ['addChild','addSibling','addSpouse','modify','viewChildren'].forEach(key => {
+          const b = this.ui.buttons[key];
+          b.disabled = true;
+          b.classList.add('btn-disabled');
+        });
+        if (this.ui.detailsModal.modify) {
+          this.ui.detailsModal.modify.disabled = true;
+          this.ui.detailsModal.modify.classList.add('btn-disabled');
+        }
+      },
+
+      async goBack() {
+        if (!this.viewHistory.length) return;
+        const prev = this.viewHistory.pop();
+        await this._loadView(prev.mode, prev.contextId, false);
+      },
+
+      go_to_top_generation() {
+        this.viewHistory = [];
+        this._loadView('generation', 1, false);
+      },
+
+      viewChildren() {
+        if (!this.currentPersonId) return;
+        this._loadView('children', this.currentPersonId, true);
+      },
+
+      async handleSearch(text) {
+        if (text.length < 2) {
+          this.ui.searchResults.innerHTML = '';
+          this.ui.searchResults.classList.add('hidden');
+          return;
+        }
+        const query = `
+          MATCH (p:Person)
+          WHERE toLower(coalesce(p.firstName,'')+' '+coalesce(p.lastName,'')) CONTAINS toLower($text)
+          RETURN p.id AS id,p.firstName AS firstName,p.lastName AS lastName
+          LIMIT 10
+        `;
+        const res = await this.runQuery(query, { text });
+        this.renderSearchResults(res);
+      },
+
+      renderSearchResults(results) {
+        this.ui.searchResults.innerHTML = '';
+        if (!results.length) {
+          this.ui.searchResults.classList.add('hidden');
+          return;
+        }
+        results.forEach(p => {
+          const div = document.createElement('div');
+          div.className = 'p-2 hover:bg-blue-100 cursor-pointer';
+          div.textContent = `${p.firstName||''} ${p.lastName||''} (${p.id})`;
+          div.addEventListener('click', () => {
+            this.showDetails(p.id);
+            this.ui.searchInput.value = '';
+            this.ui.searchResults.classList.add('hidden');
+          });
+          this.ui.searchResults.appendChild(div);
+        });
+        this.ui.searchResults.classList.remove('hidden');
+      },
+
+      async showDetails(personId) {
+        const query = `
+          MATCH (p:Person {id:$personId})
+          OPTIONAL MATCH (p)-[:SPOUSE_OF]-(s:Person)
+          OPTIONAL MATCH (p)-[:CHILD_OF]->(parent:Person)
+          OPTIONAL MATCH (p)<-[:CHILD_OF]-(child:Person)
+          RETURN p,
+                 collect(DISTINCT {id:s.id,name:trim(coalesce(s.firstName,'')+' '+coalesce(s.lastName,''))}) AS spouses,
+                 collect(DISTINCT {id:parent.id,name:trim(coalesce(parent.firstName,'')+' '+coalesce(parent.lastName,''))}) AS parents,
+                 collect(DISTINCT {id:child.id,name:trim(coalesce(child.firstName,'')+' '+coalesce(child.lastName,''))}) AS children
+        `;
+        const res = await this.runQuery(query, { personId });
+        if (!res.length) {
+          alert('Person details not found.');
+          return;
+        }
+        const props = res[0].p.properties;
+        const spouses = res[0].spouses.filter(s=>s.id).map(s=>({id:s.id,name:s.name||s.id}));
+        const parents = res[0].parents.filter(p=>p.id).map(p=>({id:p.id,name:p.name||p.id}));
+        const children = res[0].children.filter(c=>c.id).map(c=>({id:c.id,name:c.name||c.id}));
+
+        let html = `
+          <h4 class="text-lg font-semibold text-gray-800 mb-2">Basic Information</h4>
+          <table class="min-w-full divide-y divide-gray-200 mb-4">
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr><td class="px-4 py-2 font-medium text-gray-700">ID:</td><td class="px-4 py-2">${props.id||'N/A'}</td></tr>
+              <tr><td class="px-4 py-2 font-medium text-gray-700">First Name:</td><td class="px-4 py-2">${props.firstName||'N/A'}</td></tr>
+              <tr><td class="px-4 py-2 font-medium text-gray-700">Last Name:</td><td class="px-4 py-2">${props.lastName||'N/A'}</td></tr>
+              <tr><td class="px-4 py-2 font-medium text-gray-700">Gender:</td><td class="px-4 py-2">${props.gender||'N/A'}</td></tr>
+              <tr><td class="px-4 py-2 font-medium text-gray-700">Date of Birth:</td><td class="px-4 py-2">${props.dob||'N/A'}</td></tr>
+              <tr><td class="px-4 py-2 font-medium text-gray-700">Date of Death:</td><td class="px-4 py-2">${props.dod||'N/A'}</td></tr>
+              <tr><td class="px-4 py-2 font-medium text-gray-700">Generation Number:</td>
+                  <td class="px-4 py-2">
+                    ${props.genNumber
+                      ? (typeof props.genNumber==='object' ? props.genNumber.low : props.genNumber)
+                      : 'N/A'}
+                  </td>
+              </tr>
+              <tr><td class="px-4 py-2 font-medium text-gray-700">Child Number:</td>
+                  <td class="px-4 py-2">
+                    ${props.childNumber
+                      ? (typeof props.childNumber==='object' ? props.childNumber.low : props.childNumber)
+                      : 'N/A'}
+                  </td>
+              </tr>
+            </tbody>
+          </table>
+        `;
+
+        // Other dynamic props
+        const excluded = ['id','firstName','lastName','gender','dob','dod','genNumber','childNumber','Created_at'];
+        let otherRows = '';
+        for (let k in props) {
+          if (!excluded.includes(k) && props[k]!=null && String(props[k]).trim()!=='') {
+            const label = k.replace(/([A-Z])/g,' $1').replace(/^./,s=>s.toUpperCase());
+            otherRows += `<tr><td class="px-4 py-2 font-medium text-gray-700">${label}:</td>
+                              <td class="px-4 py-2">${props[k]}</td></tr>`;
+          }
+        }
+        if (otherRows) {
+          html += `
+            <h4 class="text-lg font-semibold text-gray-800 mb-2 mt-4">Other Details</h4>
+            <table class="min-w-full divide-y divide-gray-200 mb-4">
+              <tbody class="bg-white divide-y divide-gray-200">
+                ${otherRows}
+              </tbody>
+            </table>
+          `;
+        }
+
+        // Family connections
+        html += `
+          <h4 class="text-lg font-semibold text-gray-800 mb-2 mt-4">Family Connections</h4>
+          <table class="min-w-full divide-y divide-gray-200">
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr>
+                <td class="px-4 py-2 font-medium text-gray-700">Parents:</td>
+                <td class="px-4 py-2">
+                  ${parents.length
+                    ? parents.map(p=>`<div>
+                                       <a href="#" class="text-blue-600 hover:underline view-details-link"
+                                          data-person-id="${p.id}">
+                                         ${p.name}
+                                       </a>
+                                     </div>`).join('')
+                    : 'None'}
+                </td>
+              </tr>
+              <tr>
+                <td class="px-4 py-2 font-medium text-gray-700">Spouses:</td>
+                <td class="px-4 py-2">
+                  ${spouses.length
+                    ? spouses.map(s=>`<div>
+                                       <a href="#" class="text-blue-600 hover:underline view-details-link"
+                                          data-person-id="${s.id}">
+                                         ${s.name}
+                                       </a>
+                                     </div>`).join('')
+                    : 'None'}
+                </td>
+              </tr>
+              <tr>
+                <td class="px-4 py-2 font-medium text-gray-700">Children:</td>
+                <td class="px-4 py-2">
+                  ${children.length
+                    ? children.map(c=>`<div>
+                                       <a href="#" class="text-blue-600 hover:underline view-details-link"
+                                          data-person-id="${c.id}">
+                                         ${c.name}
+                                       </a>
+                                     </div>`).join('')
+                    : 'None'}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        `;
+
+        this.ui.detailsModal.content.innerHTML = html;
+        this.ui.detailsModal.title.textContent =
+          `Details for ${props.firstName||''} ${props.lastName||''}`;
+        this.currentPersonId = personId;
+
+        this.ui.detailsModal.viewChildren.disabled = false;
+        this.ui.detailsModal.viewChildren.classList.remove('btn-disabled');
+        this.ui.detailsModal.modify.disabled = !this.editModeEnabled;
+        this.ui.detailsModal.modify.classList.toggle('btn-disabled', !this.editModeEnabled);
+
+        // Show modal via container
+        this.ui.detailsModal.container.classList.remove('hidden');
+        setTimeout(() => {
+          this.ui.detailsModal.container.style.opacity = 1;
+        }, 10);
+      },
+
+      closeDetailsModal() {
+        this.ui.detailsModal.container.style.opacity = 0;
+        setTimeout(() => {
+          this.ui.detailsModal.container.classList.add('hidden');
+        }, 200);
+      },
+
+      async addChild() {
+        if (!this.editModeEnabled) {
+          alert("Please enter Edit Mode to add children.");
+          return;
+        }
+        if (!this.currentPersonId) return;
+        const parentRes = await this.runQuery(
+          'MATCH (p:Person {id:$id}) RETURN p.genNumber as gen',
+          { id: this.currentPersonId }
+        );
+        const parentGen = parentRes[0] ? parseInt(parentRes[0].gen, 10) : 1;
+        const spouses = await this.runQuery(
+          'MATCH (p:Person {id:$id})-[:SPOUSE_OF]-(s:Person) RETURN s.id as id,s.firstName as name',
+          { id: this.currentPersonId }
+        );
+        this.openForm({
+          type: 'child',
+          relatedId: this.currentPersonId,
+          genNumber: parentGen + 1,
+          title: 'Add New Child',
+          context: { spouses }
+        });
+      },
+
+      async addSibling() {
+        if (!this.editModeEnabled) {
+          alert("Please enter Edit Mode to add siblings.");
+          return;
+        }
+        if (!this.currentPersonId) return;
+        const sibRes = await this.runQuery(
+          'MATCH (p:Person {id:$id}) RETURN p.genNumber as gen',
+          { id: this.currentPersonId }
+        );
+        if (!sibRes[0]) {
+          alert("Cannot add sibling to a person with no generation number.");
+          return;
+        }
+        this.openForm({
+          type: 'sibling',
+          relatedId: this.currentPersonId,
+          genNumber: parseInt(sibRes[0].gen, 10),
+          title: 'Add New Sibling'
+        });
+      },
+
+      async addSpouse() {
+        if (!this.editModeEnabled) {
+          alert("Please enter Edit Mode to add spouses.");
+          return;
+        }
+        if (!this.currentPersonId) return;
+        const pRes = await this.runQuery(
+          'MATCH (p:Person {id:$id}) RETURN p.genNumber as gen',
+          { id: this.currentPersonId }
+        );
+        const gen = pRes[0] ? parseInt(pRes[0].gen, 10) : 1;
+        this.openForm({
+          type: 'spouse',
+          relatedId: this.currentPersonId,
+          genNumber: gen,
+          title: 'Add New Spouse'
+        });
+      },
+
+      async modifyPerson(personIdToModify = null) {
+        if (!this.editModeEnabled) {
+          alert("Please enter Edit Mode to modify persons.");
+          return;
+        }
+        const target = personIdToModify || this.currentPersonId;
+        if (!target) {
+          alert("Please select a person to modify.");
+          return;
+        }
+        const res = await this.runQuery(
+          'MATCH (p:Person {id:$id}) RETURN p',
+          { id: target }
+        );
+        const data = res[0].p.properties;
+        const parRes = await this.runQuery(
+          `MATCH (:Person {id:$id})-[:CHILD_OF]->(p:Person)
+           RETURN collect({id:p.id,name:trim(coalesce(p.firstName,'')+' '+coalesce(p.lastName,''))}) AS parents`,
+          { id: target }
+        );
+        const parents = parRes[0]?.parents || [];
+        data.parents = parents.map(p=>p.id);
+        data.parentNames = parents.map(p=>p.name);
+
+        this.openForm({
+          type: 'modify',
+          relatedId: target,
+          initialData: data,
+          title: 'Modify Person'
+        });
+      },
+
+      async saveChildNumber(oldId, newCNStr, originalStr) {
+        const newCN = parseInt(newCNStr,10);
+        if (isNaN(newCN)) {
+          alert('Child Number must be a number.');
+          this.refreshCurrentView();
+          return;
+        }
+        const parRes = await this.runQuery(
+          `MATCH (:Person {id:$id})-[:CHILD_OF]->(p:Person)
+           RETURN p.id as id LIMIT 1`,
+          { id: oldId }
+        );
+        const parentId = parRes[0]?.id || oldId.substring(0,oldId.lastIndexOf('_'));
+        if (!parentId) {
+          alert('Could not determine parent.');
+          this.refreshCurrentView();
+          return;
+        }
+        const newId = `${parentId}_${newCN}`;
+        if (newId === oldId) {
+          this.refreshCurrentView();
+          return;
+        }
+        const conflict = await this.runQuery('MATCH (p:Person {id:$id}) RETURN p', { id:newId });
+        if (conflict.length) {
+          alert(`A person with ID '${newId}' already exists.`);
+          return;
+        }
+        const upd = `
+          MATCH (p:Person {id:$oldId})
+          SET p.id=$newId,p.childNumber=$newCN
+          WITH p,$oldId AS oldB,$newId AS newB
+          CALL {
+            WITH p
+            MATCH (p)<-[:CHILD_OF*]-(d:Person)
+            RETURN collect(d) AS desc
+          }
+          UNWIND desc AS d
+          SET d.id = newB + substring(d.id, size(oldB))
+          RETURN count(d)
+        `;
+        await this.runQuery(upd, { oldId, newId, newCN, oldB:oldId, newB:newId });
+        alert('Child Number updated successfully!');
+        this.refreshCurrentView();
+      },
+
+      async saveProperty(personId, prop, value) {
+        const q = `MATCH (p:Person {id:$id}) SET p.${prop}=$value`;
+        await this.runQuery(q, { id:personId, value });
+        alert(`${prop} updated successfully!`);
+        this.refreshCurrentView();
+      },
+
+      async openForm({ type, relatedId, genNumber, title, initialData={}, context={} }) {
+        const schemaRes = await this.runQuery(
+          "MATCH (s:Schema {id:'person_schema'}) RETURN s.keys AS keys,s.mandatory_keys AS mandatory"
+        );
+        if (!schemaRes.length) {
+          alert("Schema not found!");
+          return;
+        }
+        const schema = schemaRes[0].keys;
+        const mandatory = schemaRes[0].mandatory || [];
+
+        this.ui.modal.title.textContent = title;
+        this.ui.modal.form.innerHTML = '';
+
+        // Build form depending on type...
+        if (type === 'spouse') {
+          // existing-spouse checkbox & new-spouse-form...
+          this.ui.modal.form.innerHTML = `
+            <div class="flex items-center">
+              <input id="existing-spouse-checkbox" type="checkbox"
+                     class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+              <label for="existing-spouse-checkbox" class="ml-2 block text-base text-gray-900">
+                Is spouse an existing person?
+              </label>
+            </div>
+            <div id="link-spouse-form" class="hidden space-y-2 pt-2">
+              <p class="text-sm text-gray-500">
+                If the person doesn't exist yet, add them first.
+              </p>
+              <input type="text" id="existing-spouse-id" placeholder="Enter existing person's ID"
+                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+            </div>
+            <div id="new-spouse-form" class="space-y-4"></div>
+          `;
+          const newForm = this.ui.modal.form.querySelector('#new-spouse-form');
+          // genNumber field
+          newForm.insertAdjacentHTML('beforeend', `
+            <div>
+              <label class="block text-base font-medium">genNumber</label>
+              <input type="text" data-key="genNumber" value="${genNumber}" disabled
+                     class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300">
+            </div>
+          `);
+          // other keys
+          schema.forEach(key => {
+            if (['genNumber','childNumber'].includes(key)) return;
+            const isMand = mandatory.includes(key);
+            const lbl = `${key}${isMand?'*':''}`;
+            const val = initialData[key]||'';
+            this.createFormField(newForm, key, lbl, val);
+          });
+          // toggle forms
+          this.ui.modal.form.querySelector('#existing-spouse-checkbox')
+            .addEventListener('change', e => {
+              document.getElementById('new-spouse-form')
+                      .classList.toggle('hidden', e.target.checked);
+              document.getElementById('link-spouse-form')
+                      .classList.toggle('hidden', !e.target.checked);
+            });
+
+        } else {
+          // For modify, show parent quick info
+          if (type==='modify' && initialData.parentNames && initialData.parentNames.length) {
+            const pns = initialData.parentNames.join(', ');
+            this.ui.modal.form.insertAdjacentHTML('beforeend', `
+              <div class="mb-4 p-3 bg-gray-50 rounded-md border text-base text-gray-600">
+                <strong>Parents:</strong> ${pns}
+              </div>
+            `);
+          }
+          // genNumber for new
+          if (type !== 'modify') {
+            this.ui.modal.form.insertAdjacentHTML('beforeend', `
+              <div>
+                <label class="block text-base font-medium">genNumber</label>
+                <input type="text" data-key="genNumber" value="${genNumber}" disabled
+                       class="mt-1 block w-full bg-gray-100 rounded-md border-gray-300">
+              </div>
+            `);
+          }
+
+          if (type === 'child') {
+            // existing spouse dropdown
+            let opts = '';
+            if (context.spouses && context.spouses.length) {
+              opts = `
+                <div id="parent-existing-spouse-section" class="mb-4">
+                  <label class="block text-base font-medium">
+                    Other Parent (Existing Spouse of ${relatedId})
+                  </label>
+                  <select id="parent-spouse-selector"
+                          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    <option value="">-- Select an existing spouse --</option>
+                    ${context.spouses.map(s=>`<option value="${s.id}">
+                      ${s.name} (${s.id})
+                    </option>`).join('')}
+                  </select>
+                </div>`;
+            }
+            this.ui.modal.form.insertAdjacentHTML('beforeend', opts);
+
+            // other schema fields
+            schema.forEach(key => {
+              if (['genNumber','childNumber'].includes(key)) return;
+              const isMand = mandatory.includes(key);
+              const lbl = `${key}${isMand?'*':''}`;
+              const val = initialData[key]||'';
+              this.createFormField(this.ui.modal.form, key, lbl, val);
+            });
+
+            // childNumber field
+            this.ui.modal.form.insertAdjacentHTML('beforeend', `
+              <div>
+                <label class="block text-base font-medium">childNumber*</label>
+                <input type="number" data-key="childNumber"
+                       class="mt-1 block w-full rounded-md border-gray-300">
+              </div>
+            `);
+
+            // child's spouse section
+            this.ui.modal.form.insertAdjacentHTML('beforeend', `
+              <div class="border-t pt-4 mt-4">
+                <label class="block text-base font-medium text-gray-700 mb-2">Child's Spouse(s)</label>
+                <div id="child-spouses-container" class="space-y-3"></div>
+                <button type="button" id="add-child-spouse-btn"
+                        class="mt-2 text-sm text-blue-600 hover:text-blue-800">
+                  + Add Child's Spouse
+                </button>
+              </div>
+            `);
+            const addBtn = this.ui.modal.form.querySelector('#add-child-spouse-btn');
+            const cont = this.ui.modal.form.querySelector('#child-spouses-container');
+            const addFields = () => {
+              cont.insertAdjacentHTML('beforeend', `
+                <div data-child-spouse-entry
+                     class="flex flex-col sm:flex-row sm:items-end gap-2 p-3 border rounded-md bg-gray-50">
+                  <div class="flex-grow">
+                    <label class="block text-sm font-medium">First Name*</label>
+                    <input type="text" data-key="childSpouseFirstName"
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                  </div>
+                  <div class="flex-grow">
+                    <label class="block text-sm font-medium">Last Name</label>
+                    <input type="text" data-key="childSpouseLastName"
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium">Gender*</label>
+                    <select data-key="childSpouseGender"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                      <option value=""></option>
+                      <option value="M">M</option>
+                      <option value="F">F</option>
+                    </select>
+                  </div>
+                  <button type="button"
+                          class="btn bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-2 rounded-md
+                                 self-center sm:self-end remove-child-spouse-btn">
+                    Remove
+                  </button>
+                </div>
+              `);
+            };
+            addBtn.addEventListener('click', addFields);
+            cont.addEventListener('click', e => {
+              if (e.target.classList.contains('remove-child-spouse-btn')) {
+                e.target.closest('[data-child-spouse-entry]').remove();
+              }
+            });
+
+          } else {
+            // Sibling or top-level: general fields
+            schema.forEach(key => {
+              if (key === 'genNumber' && type !== 'modify') return;
+              const isMand = mandatory.includes(key);
+              const lbl = `${key}${isMand?'*':''}`;
+              const val = initialData[key]||'';
+              this.createFormField(this.ui.modal.form, key, lbl, val);
+            });
+          }
+
+          if (type === 'modify') {
+            // parents section
+            this.ui.modal.form.insertAdjacentHTML('beforeend', `
+              <div class="border-t pt-4 mt-4">
+                <label class="block text-base font-medium text-gray-700 mb-2">Parents</label>
+                <div id="parents-list" class="space-y-2"></div>
+                <button type="button" id="add-parent-btn"
+                        class="mt-2 text-sm text-blue-600 hover:text-blue-800">
+                  + Add Parent
+                </button>
+              </div>
+            `);
+            // actions
+            this.ui.modal.form.insertAdjacentHTML('beforeend', `
+              <div class="border-t pt-4 mt-4">
+                <label class="block text-base font-medium text-gray-700 mb-2">Actions</label>
+                <button type="button" id="modal-view-children-btn" class="btn btn-secondary">
+                  View Children
+                </button>
+              </div>
+            `);
+            const pl = document.getElementById('parents-list');
+            const ap = document.getElementById('add-parent-btn');
+            const addParentField = (val='') => {
+              pl.insertAdjacentHTML('beforeend', `
+                <div class="flex items-center gap-2">
+                  <input type="text" data-parent-id value="${val}"
+                         placeholder="Enter Parent ID"
+                         class="flex-grow mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                  <button type="button" class="text-red-500 hover:text-red-700 remove-parent-btn">
+                    Remove
+                  </button>
+                </div>
+              `);
+            };
+            ap.addEventListener('click', () => addParentField());
+            pl.addEventListener('click', e => {
+              if (e.target.classList.contains('remove-parent-btn')) {
+                e.target.closest('.flex').remove();
+              }
+            });
+            (initialData.parents||[]).forEach(id => addParentField(id));
+          }
+        }
+
+        // Show modal correctly
+        this.ui.modal.container.classList.remove('hidden');
+        setTimeout(() => {
+          this.ui.modal.container.style.opacity = 1;
+        }, 10);
+
+        const submitHandler = async () => {
+          const formData = {};
+          let newId = (type==='modify') ? relatedId : null;
+
+          // collect data
+          this.ui.modal.form.querySelectorAll('[data-key]').forEach(inp => {
+            const key = inp.dataset.key;
+            let val = inp.value;
+            if ((key==='genNumber'||key==='childNumber') && val) {
+              formData[key] = parseInt(val,10);
+            } else if (key) {
+              formData[key] = val;
+            }
+          });
+
+          // new child spouses
+          const newChildSpouses = [];
+          if (type==='child') {
+            document
+              .querySelectorAll('#child-spouses-container [data-child-spouse-entry]')
+              .forEach(entry => {
+                const fn = entry.querySelector('[data-key="childSpouseFirstName"]').value.trim();
+                const ln = entry.querySelector('[data-key="childSpouseLastName"]').value.trim();
+                const g  = entry.querySelector('[data-key="childSpouseGender"]').value.trim();
+                if (!fn||!g) {
+                  alert('Please fill First Name & Gender for all child spouses.');
+                  return;
+                }
+                newChildSpouses.push({ firstName:fn, lastName:ln, gender:g });
+              });
+          }
+
+          if (type==='modify') {
+            // handle ID change
+            const oldId = relatedId;
+            const oldCN = initialData.childNumber
+              ? (typeof initialData.childNumber==='object'
+                   ? initialData.childNumber.low
+                   : initialData.childNumber)
+              : '';
+            const newCN = formData.childNumber||'';
+            if (newCN && oldCN && newCN!==String(oldCN)) {
+              const pr = await this.runQuery(
+                `MATCH (:Person {id:$id})-[:CHILD_OF]->(p:Person)
+                 RETURN p.id AS id LIMIT 1`,
+                { id:oldId }
+              );
+              if (pr.length) {
+                const pId = pr[0].id;
+                newId = `${pId}_${newCN}`;
+                const ex = await this.runQuery('MATCH (p:Person{id:$id}) RETURN p', { id:newId });
+                if (ex.length) {
+                  alert(`ID '${newId}' exists. Choose different childNumber.`);
+                  return;
+                }
+              }
+            }
+
+            // parents update
+            const parentIds = Array.from(
+              this.ui.modal.form.querySelectorAll('[data-parent-id]')
+            ).map(i => i.value.trim()).filter(Boolean);
+            const uniq = [...new Set(parentIds)];
+            await this.runQuery(
+              `MATCH (c:Person {id:$oldId})-[r:CHILD_OF]->() DELETE r`,
+              { oldId }
+            );
+            if (uniq.length) {
+              await this.runQuery(
+                `MATCH (c:Person{id:$oldId})
+                 UNWIND $pids AS pid
+                 MATCH (p:Person{id:pid})
+                 MERGE (c)-[:CHILD_OF]->(p)`,
+                { oldId, pids:uniq }
+              );
+            }
+
+            // determine props to set/remove
+            const toSet = {}, toRem = [];
+            for (let k in formData) {
+              let init = initialData[k];
+              if (neo4j.isInt(init)) init = init.toNumber();
+              if (formData[k] !== (init||'')) {
+                if (formData[k] || formData[k]===0) {
+                  toSet[k] = formData[k];
+                } else if (!mandatory.includes(k)) {
+                  toRem.push(k);
+                }
+              }
+            }
+            if (newId && newId!==oldId) {
+              toSet.id = newId;
+            }
+            let setC = Object.keys(toSet).length
+                     ? 'SET p+= $toSet' : '';
+            let remC = toRem.length
+                     ? 'REMOVE '+toRem.map(k=>`p.\`${k}\``).join(', ')
+                     : '';
+            if (setC||remC) {
+              await this.runQuery(
+                `MATCH (p:Person{id:$oldId}) ${setC} ${remC}`,
+                { oldId, toSet }
+              );
+            }
+
+          } else {
+            // new nodes
+            if (type==='child'||type==='sibling') {
+              const cn = formData.childNumber;
+              if (!cn) {
+                alert('childNumber is required.');
+                return;
+              }
+              let pId = relatedId;
+              if (type==='sibling') {
+                const pr = await this.runQuery(
+                  `MATCH (:Person{id:$id})-[:CHILD_OF]->(p:Person)
+                   RETURN p.id AS id LIMIT 1`,
+                  { id:relatedId }
+                );
+                if (!pr.length) {
+                  alert('Cannot find parent to generate ID.');
+                  return;
+                }
+                pId = pr[0].id;
+              }
+              newId = `${pId}_${cn}`;
+            } else if (type==='spouse') {
+              const countRes = await this.runQuery(
+                `MATCH (p:Person{id:$id})-[:SPOUSE_OF]-()
+                 RETURN count(*) AS spouseCount`,
+                { id:relatedId }
+              );
+              const idx = (countRes[0]?.spouseCount.low||0) + 1;
+              newId = `${relatedId}_sp${idx}`;
+            }
+
+            if (!newId) {
+              alert('A unique ID is required.');
+              return;
+            }
+
+            const props = Object.fromEntries(
+              Object.entries(formData).filter(([k,v])=>v!=='')
+            );
+            await this.runQuery(
+              'CREATE (p:Person {id:$id}) SET p+=$props',
+              { id:newId, props }
+            );
+
+            // new child's spouses
+            if (type==='child' && newChildSpouses.length) {
+              let spIdx=1;
+              for (const sd of newChildSpouses) {
+                const spId = `${newId}_sp${spIdx++}`;
+                const spProps = {
+                  id:spId,
+                  firstName:sd.firstName,
+                  lastName:sd.lastName,
+                  gender:sd.gender,
+                  genNumber:formData.genNumber
+                };
+                await this.runQuery(
+                  'CREATE (s:Person {id:$id}) SET s+=$props',
+                  { id:spId, props:spProps }
+                );
+                await this.runQuery(
+                  'MATCH (p1:Person{id:$p1}), (p2:Person{id:$p2}) MERGE (p1)-[:SPOUSE_OF]-(p2)',
+                  { p1:newId, p2:spId }
+                );
+              }
+            }
+
+            // relationships
+            if (type==='child') {
+              const parentIds = [relatedId];
+              const sel = document.getElementById('parent-spouse-selector');
+              if (sel && sel.value) parentIds.push(sel.value);
+              for (const pid of parentIds) {
+                await this.runQuery(
+                  'MATCH (c:Person{id:$cid}), (p:Person{id:$pid}) MERGE (c)-[:CHILD_OF]->(p)',
+                  { cid:newId, pid }
+                );
+              }
+            } else if (type==='sibling') {
+              const pr = await this.runQuery(
+                'MATCH (:Person{id:$id})-[:CHILD_OF]->(p:Person) RETURN p.id AS id',
+                { id:relatedId }
+              );
+              for (const p of pr) {
+                await this.runQuery(
+                  'MATCH (c:Person{id:$cid}), (p:Person{id:$pid}) MERGE (c)-[:CHILD_OF]->(p)',
+                  { cid:newId, pid:p.id }
+                );
+              }
+            } else if (type==='spouse') {
+              await this.runQuery(
+                'MATCH (p1:Person{id:$p1}), (p2:Person{id:$p2}) MERGE (p1)-[:SPOUSE_OF]-(p2)',
+                { p1:newId, p2:relatedId }
+              );
+            }
+          }
+
+          alert('Operation successful!');
+          closeModal();
+          this.refreshCurrentView();
+        };
+
+        const closeModal = () => {
+          this.ui.modal.container.style.opacity = 0;
+          setTimeout(() => {
+            this.ui.modal.container.classList.add('hidden');
+          }, 200);
+          this.ui.modal.submit.removeEventListener('click', submitHandler);
+          this.ui.modal.cancel.removeEventListener('click', closeModal);
+        };
+
+        const vcBtn = document.getElementById('modal-view-children-btn');
+        if (vcBtn) {
+          vcBtn.addEventListener('click', () => {
+            closeModal();
+            this._loadView('children', relatedId, true);
+          });
+        }
+
+        this.ui.modal.submit.addEventListener('click', submitHandler);
+        this.ui.modal.cancel.addEventListener('click', closeModal);
+      },
+
+      createFormField(container, key, label, value) {
+        let html = '';
+        if (key==='dob'||key==='dod') {
+          html = `
+            <div>
+              <label class="block text-base font-medium">${label}</label>
+              <input type="text" data-key="${key}" value="${value}"
+                     placeholder="YYYY or YYYY-MM-DD"
+                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm
+                            focus:border-blue-500 focus:ring-blue-500">
+            </div>`;
+        } else if (key==='gender') {
+          html = `
+            <div>
+              <label class="block text-base font-medium">${label}</label>
+              <select data-key="${key}"
+                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm
+                             focus:border-blue-500 focus:ring-blue-500">
+                <option value="" ${value===''?'selected':''}></option>
+                <option value="M" ${value==='M'?'selected':''}>M</option>
+                <option value="F" ${value==='F'?'selected':''}>F</option>
+              </select>
+            </div>`;
+        } else {
+          html = `
+            <div>
+              <label class="block text-base font-medium">${label}</label>
+              <input type="text" data-key="${key}" value="${value}"
+                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm
+                            focus:border-blue-500 focus:ring-blue-500">
+            </div>`;
+        }
+        container.insertAdjacentHTML('beforeend', html);
+      },
+
+      async refreshCurrentView() {
+        await this._loadView(this.viewMode, this.viewContextId, false);
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => App.init());
+  </script>
+</body>
+</html>

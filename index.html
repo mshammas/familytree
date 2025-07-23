@@ -295,29 +295,34 @@
 
                 // Details Modal Events
                 this.ui.detailsModal.close.addEventListener('click', () => this.closeDetailsModal());
-                this.ui.detailsModal.modify.addEventListener('click', () => {
-                    // Check edit mode before allowing modify from details modal
-                    if (!this.editModeEnabled) {
-                        alert("Please enter Edit Mode to modify persons.");
-                        return;
-                    }
-                    this.closeDetailsModal();
-                    this.modifyPerson(); 
-                });
+                // Removed direct listener for details-modal-modify here, will use delegation below
                 this.ui.detailsModal.viewChildren.addEventListener('click', () => {
                     this.closeDetailsModal();
                     this.viewChildren(); 
                 });
 
-                // NEW: Event delegation for links within the details modal content
-                this.ui.detailsModal.content.addEventListener('click', (e) => {
+                // NEW: Event delegation for links and modify button within the details modal container
+                this.ui.detailsModal.container.addEventListener('click', (e) => {
                     const link = e.target.closest('.view-details-link');
+                    const modifyBtn = e.target.closest('#details-modal-modify'); // Check for modify button specifically
+
                     if (link) {
                         e.preventDefault(); // Prevent default link behavior
                         e.stopPropagation(); // Prevent modal from closing if click bubbles
                         const clickedPersonId = link.dataset.personId;
                         this.closeDetailsModal(); // Close current modal
                         this.showDetails(clickedPersonId); // Open new details modal
+                    } else if (modifyBtn) {
+                        e.preventDefault(); // Prevent default button behavior
+                        e.stopPropagation();
+                        // Check edit mode before allowing modify from details modal
+                        if (!this.editModeEnabled) {
+                            alert("Please enter Edit Mode to modify persons.");
+                            return;
+                        }
+                        this.closeDetailsModal();
+                        // Pass the currentPersonId to modifyPerson
+                        this.modifyPerson(this.currentPersonId); 
                     }
                 });
             },
@@ -348,7 +353,7 @@
                     this.ui.buttons.addSibling,
                     this.ui.buttons.addSpouse,
                     this.ui.buttons.modify,
-                    this.ui.detailsModal.modify // Modify button in details modal
+                    this.ui.detailsModal.modify // Explicitly include details modal modify button
                 ];
 
                 editableButtons.forEach(btn => {
@@ -923,17 +928,21 @@
                 });
             },
 
-            async modifyPerson() {
+            async modifyPerson(personIdToModify = null) { // Added parameter
                 // Check edit mode
                 if (!this.editModeEnabled) { alert("Please enter Edit Mode to modify persons."); return; }
-                if (!this.currentPersonId) {
+                
+                // Use personIdToModify if provided, otherwise fallback to currentPersonId
+                const targetPersonId = personIdToModify || this.currentPersonId;
+
+                if (!targetPersonId) {
                     alert("Please select a person to modify or use the search results 'Modify Person' button.");
                     return;
                 }
-                const personDataResult = (await this.runQuery('MATCH (p:Person {id: $id}) RETURN p', { id: this.currentPersonId }))[0];
+                const personDataResult = (await this.runQuery('MATCH (p:Person {id: $id}) RETURN p', { id: targetPersonId }))[0];
                 const personData = personDataResult.p.properties;
 
-                const parentsResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN collect({id: p.id, name: trim(coalesce(p.firstName, "") + " " + coalesce(p.lastName, ""))}) as parents', { id: this.currentPersonId });
+                const parentsResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN collect({id: p.id, name: trim(coalesce(p.firstName, "") + " " + coalesce(p.lastName, ""))}) as parents', { id: targetPersonId });
                 const parentsInfo = parentsResult.length > 0 ? parentsResult[0].parents : [];
                 
                 personData.parents = parentsInfo.map(p => p.id);
@@ -941,7 +950,7 @@
 
                 this.openForm({
                     type: 'modify',
-                    relatedId: this.currentPersonId,
+                    relatedId: targetPersonId, // Use targetPersonId here
                     initialData: personData,
                     title: 'Modify Person'
                 });
