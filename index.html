@@ -469,13 +469,13 @@
             },
 
             async _displayChildrenInternal(parentId) {
-                const parentInfoResult = await this.runQuery('MATCH (p:Person {id: $id}) OPTIONAL MATCH (p)-[:CHILD_OF]->(gp:Person) RETURN p.firstName as firstName, p.lastName as lastName, collect({id: gp.id, name: trim(coalesce(gp.firstName, "") + " " + coalesce(gp.lastName, ""))}) as grandParents', { id: parentId });
+                const parentInfoResult = await this.runQuery('MATCH (p:Person {id: $id}) OPTIONAL MATCH (p)-[:CHILD_OF]->(gp:Person) RETURN p.firstName as firstName, p.lastName as lastName, collect(DISTINCT {id: gp.id, name: trim(coalesce(gp.firstName, "") + " " + coalesce(gp.lastName, ""))}) as grandParents', { id: parentId });
                 const parentInfo = parentInfoResult.length > 0 ? parentInfoResult[0] : { firstName: parentId, lastName: '', grandParents: [] };
                 const parentName = `${parentInfo.firstName || ''} ${parentInfo.lastName || ''}`.trim();
                 
                 let labelHTML = `Children of: ${parentName}`;
                 if (parentInfo.grandParents && parentInfo.grandParents.length > 0 && parentInfo.grandParents[0].id) {
-                    const gpLinks = parentInfo.grandParents.map(gp => `<a href="#" data-parent-id="${gp.id}" class="text-blue-500 hover:underline view-parents-link">${gp.name}</a>`).join(', ');
+                    const gpLinks = parentInfo.grandParents.map(gp => `<a href="#" data-parent-id="${gp.id}" class="text-blue-500 hover:underline view-parents-link">${gp.name || gp.id}</a>`).join(', ');
                     labelHTML += ` <span class="text-sm">(Parents: ${gpLinks})</span>`;
                 }
                 
@@ -794,8 +794,9 @@
 
                 // Add other dynamic properties
                 let otherDetailsRows = '';
+                const excludedKeys = ['id', 'firstName', 'lastName', 'gender', 'dob', 'dod', 'genNumber', 'childNumber', 'Created_at']; // Explicitly exclude Created_at
                 for (const key in personData) {
-                    if (!['id', 'firstName', 'lastName', 'gender', 'dob', 'dod', 'genNumber', 'childNumber'].includes(key)) {
+                    if (!excludedKeys.includes(key)) {
                         // Ensure value is not null/undefined/empty string before adding
                         const value = personData[key];
                         if (value !== null && value !== undefined && String(value).trim() !== '') {
@@ -933,7 +934,7 @@
                 const personData = personDataResult.p.properties;
 
                 const parentsResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN collect({id: p.id, name: trim(coalesce(p.firstName, "") + " " + coalesce(p.lastName, ""))}) as parents', { id: this.currentPersonId });
-                const parentsInfo = parentsResult.length > 0 ? parentsInfo[0].parents : [];
+                const parentsInfo = parentsResult.length > 0 ? parentsResult[0].parents : [];
                 
                 personData.parents = parentsInfo.map(p => p.id);
                 personData.parentNames = parentsInfo.map(p => p.name);
