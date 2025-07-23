@@ -240,7 +240,11 @@
 
                 // Search
                 this.ui.searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
-                
+             
+               // Submit and Close buttons of Modify Person page
+               this.ui.modal.submit.addEventListener('click', () => this.handleModalSubmit());
+               this.ui.modal.cancel.addEventListener('click', () => this.closeMainModal());
+   
                 // Event Delegation for inline editing
                 this.ui.personList.addEventListener('click', (e) => {
                     const action = e.target.dataset.action;
