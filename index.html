@@ -313,7 +313,7 @@
                 this.ui.detailsModal.content.addEventListener('click', (e) => {
                     const link = e.target.closest('.view-details-link');
                     if (link) {
-                        e.preventDefault();
+                        e.preventDefault(); // Prevent default link behavior
                         e.stopPropagation(); // Prevent modal from closing if click bubbles
                         const clickedPersonId = link.dataset.personId;
                         this.closeDetailsModal(); // Close current modal
@@ -758,9 +758,9 @@
                     OPTIONAL MATCH (p)-[:CHILD_OF]->(parent:Person)
                     OPTIONAL MATCH (p)<-[:CHILD_OF]-(child:Person)
                     RETURN p, 
-                           collect(DISTINCT {id: s.id, name: s.firstName + ' ' + s.lastName}) AS spouses,
-                           collect(DISTINCT {id: parent.id, name: parent.firstName + ' ' + parent.lastName}) AS parents,
-                           collect(DISTINCT {id: child.id, name: child.firstName + ' ' + child.lastName}) AS children
+                           collect(DISTINCT {id: s.id, name: trim(coalesce(s.firstName, '') + ' ' + coalesce(s.lastName, ''))}) AS spouses,
+                           collect(DISTINCT {id: parent.id, name: trim(coalesce(parent.firstName, '') + ' ' + coalesce(parent.lastName, ''))}) AS parents,
+                           collect(DISTINCT {id: child.id, name: trim(coalesce(child.firstName, '') + ' ' + coalesce(child.lastName, ''))}) AS children
                 `;
                 const result = await this.runQuery(query, { personId });
 
@@ -770,9 +770,11 @@
                 }
 
                 const personData = result[0].p.properties;
-                const spouses = result[0].spouses.filter(s => s.id); // Filter out nulls/empty
-                const parents = result[0].parents.filter(p => p.id);
-                const children = result[0].children.filter(c => c.id);
+                // Ensure names are properly constructed and fall back to ID if empty
+                const spouses = result[0].spouses.filter(s => s.id).map(s => ({ id: s.id, name: s.name.trim() || s.id }));
+                const parents = result[0].parents.filter(p => p.id).map(p => ({ id: p.id, name: p.name.trim() || p.id }));
+                const children = result[0].children.filter(c => c.id).map(c => ({ id: c.id, name: c.name.trim() || c.id }));
+
 
                 let detailsHtml = `
                     <h4 class="text-lg font-semibold text-gray-800 mb-2">Basic Information</h4>
@@ -794,7 +796,11 @@
                 let otherDetailsRows = '';
                 for (const key in personData) {
                     if (!['id', 'firstName', 'lastName', 'gender', 'dob', 'dod', 'genNumber', 'childNumber'].includes(key)) {
-                        otherDetailsRows += `<tr><td class="px-4 py-2 font-medium text-gray-700">${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</td><td class="px-4 py-2">${personData[key] || 'N/A'}</td></tr>`;
+                        // Ensure value is not null/undefined/empty string before adding
+                        const value = personData[key];
+                        if (value !== null && value !== undefined && String(value).trim() !== '') {
+                            otherDetailsRows += `<tr><td class="px-4 py-2 font-medium text-gray-700">${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</td><td class="px-4 py-2">${value}</td></tr>`;
+                        }
                     }
                 }
                 if (otherDetailsRows) { // Only add section if there are other details
@@ -927,7 +933,7 @@
                 const personData = personDataResult.p.properties;
 
                 const parentsResult = await this.runQuery('MATCH (:Person {id: $id})-[:CHILD_OF]->(p:Person) RETURN collect({id: p.id, name: trim(coalesce(p.firstName, "") + " " + coalesce(p.lastName, ""))}) as parents', { id: this.currentPersonId });
-                const parentsInfo = parentsResult.length > 0 ? parentsResult[0].parents : [];
+                const parentsInfo = parentsResult.length > 0 ? parentsInfo[0].parents : [];
                 
                 personData.parents = parentsInfo.map(p => p.id);
                 personData.parentNames = parentsInfo.map(p => p.name);
