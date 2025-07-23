@@ -149,7 +149,7 @@
                 <div id="details-modal-content" class="mt-4 px-7 py-3 text-base text-left">
                     <!-- Details will be inserted here by JavaScript -->
                 </div>
-                <div class="flex flex-col sm:flex-row sm:justify-end sm:space-x-2 mt-6"> <!-- Adjusted flex and spacing -->
+                <div class="flex flex-col sm:flex-row sm:justify-end sm:space-x-2 mt-6">
                     <button id="details-modal-view-children" class="btn btn-primary w-full sm:w-auto mb-2 sm:mb-0">View Children</button>
                     <button id="details-modal-close" class="btn btn-secondary w-full sm:w-auto mb-2 sm:mb-0">Close</button>
                     <button id="details-modal-modify" class="btn btn-primary w-full sm:w-auto">Modify Person</button>
@@ -307,6 +307,18 @@
                 this.ui.detailsModal.viewChildren.addEventListener('click', () => {
                     this.closeDetailsModal();
                     this.viewChildren(); 
+                });
+
+                // NEW: Event delegation for links within the details modal content
+                this.ui.detailsModal.content.addEventListener('click', (e) => {
+                    const link = e.target.closest('.view-details-link');
+                    if (link) {
+                        e.preventDefault();
+                        e.stopPropagation(); // Prevent modal from closing if click bubbles
+                        const clickedPersonId = link.dataset.personId;
+                        this.closeDetailsModal(); // Close current modal
+                        this.showDetails(clickedPersonId); // Open new details modal
+                    }
                 });
             },
 
@@ -518,7 +530,7 @@
                 } else {
                     people.forEach(person => {
                         const row = document.createElement('tr');
-                        row.className = 'block sm:table-row border-b sm:border-none mb-2 sm:mb-0 cursor-pointer hover:bg-gray-50';
+                        row.className = 'block sm:table-row border-b sm:border-none mb-2 sm:mb-0 cursor-pointer hover:bg-blue-50'; // Changed hover:bg-gray-50 to hover:bg-blue-50 for consistency
                         
                         let indicatorHTML = '';
                         let childNumberContent = '';
@@ -764,36 +776,60 @@
 
                 let detailsHtml = `
                     <h4 class="text-lg font-semibold text-gray-800 mb-2">Basic Information</h4>
-                    <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-gray-700 mb-4">
-                        <dt class="font-medium">ID:</dt><dd>${personData.id || 'N/A'}</dd>
-                        <dt class="font-medium">First Name:</dt><dd>${personData.firstName || 'N/A'}</dd>
-                        <dt class="font-medium">Last Name:</dt><dd>${personData.lastName || 'N/A'}</dd>
-                        <dt class="font-medium">Gender:</dt><dd>${personData.gender || 'N/A'}</dd>
-                        <dt class="font-medium">Date of Birth:</dt><dd>${personData.dob || 'N/A'}</dd>
-                        <dt class="font-medium">Date of Death:</dt><dd>${personData.dod || 'N/A'}</dd>
-                        <dt class="font-medium">Generation Number:</dt><dd>${personData.genNumber ? (typeof personData.genNumber === 'object' ? personData.genNumber.low : personData.genNumber) : 'N/A'}</dd>
-                        <dt class="font-medium">Child Number:</dt><dd>${personData.childNumber ? (typeof personData.childNumber === 'object' ? personData.childNumber.low : personData.childNumber) : 'N/A'}</dd>
-                    </dl>
+                    <table class="min-w-full divide-y divide-gray-200 mb-4">
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <tr><td class="px-4 py-2 font-medium text-gray-700">ID:</td><td class="px-4 py-2">${personData.id || 'N/A'}</td></tr>
+                            <tr><td class="px-4 py-2 font-medium text-gray-700">First Name:</td><td class="px-4 py-2">${personData.firstName || 'N/A'}</td></tr>
+                            <tr><td class="px-4 py-2 font-medium text-gray-700">Last Name:</td><td class="px-4 py-2">${personData.lastName || 'N/A'}</td></tr>
+                            <tr><td class="px-4 py-2 font-medium text-gray-700">Gender:</td><td class="px-4 py-2">${personData.gender || 'N/A'}</td></tr>
+                            <tr><td class="px-4 py-2 font-medium text-gray-700">Date of Birth:</td><td class="px-4 py-2">${personData.dob || 'N/A'}</td></tr>
+                            <tr><td class="px-4 py-2 font-medium text-gray-700">Date of Death:</td><td class="px-4 py-2">${personData.dod || 'N/A'}</td></tr>
+                            <tr><td class="px-4 py-2 font-medium text-gray-700">Generation Number:</td><td class="px-4 py-2">${personData.genNumber ? (typeof personData.genNumber === 'object' ? personData.genNumber.low : personData.genNumber) : 'N/A'}</td></tr>
+                            <tr><td class="px-4 py-2 font-medium text-gray-700">Child Number:</td><td class="px-4 py-2">${personData.childNumber ? (typeof personData.childNumber === 'object' ? personData.childNumber.low : personData.childNumber) : 'N/A'}</td></tr>
+                        </tbody>
+                    </table>
                 `;
 
                 // Add other dynamic properties
-                let otherDetailsHtml = '';
+                let otherDetailsRows = '';
                 for (const key in personData) {
                     if (!['id', 'firstName', 'lastName', 'gender', 'dob', 'dod', 'genNumber', 'childNumber'].includes(key)) {
-                        otherDetailsHtml += `<dt class="font-medium">${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</dt><dd>${personData[key] || 'N/A'}</dd>`;
+                        otherDetailsRows += `<tr><td class="px-4 py-2 font-medium text-gray-700">${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</td><td class="px-4 py-2">${personData[key] || 'N/A'}</td></tr>`;
                     }
                 }
-                if (otherDetailsHtml) {
-                    detailsHtml += `<h4 class="text-lg font-semibold text-gray-800 mb-2 mt-4">Other Details</h4><dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-gray-700 mb-4">${otherDetailsHtml}</dl>`;
+                if (otherDetailsRows) { // Only add section if there are other details
+                    detailsHtml += `<h4 class="text-lg font-semibold text-gray-800 mb-2 mt-4">Other Details</h4>
+                                    <table class="min-w-full divide-y divide-gray-200 mb-4">
+                                        <tbody class="bg-white divide-y divide-gray-200">
+                                            ${otherDetailsRows}
+                                        </tbody>
+                                    </table>`;
                 }
 
 
                 detailsHtml += `<h4 class="text-lg font-semibold text-gray-800 mb-2 mt-4">Family Connections</h4>
-                    <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-gray-700">
-                        <dt class="font-medium">Parents:</dt><dd>${parents.map(p => p.name).join(', ') || 'None'}</dd>
-                        <dt class="font-medium">Spouses:</dt><dd>${spouses.map(s => s.name).join(', ') || 'None'}</dd>
-                        <dt class="font-medium">Children:</dt><dd>${children.map(c => c.name).join(', ') || 'None'}</dd>
-                    </dl>
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <tr>
+                                <td class="px-4 py-2 font-medium text-gray-700">Parents:</td>
+                                <td class="px-4 py-2">
+                                    ${parents.length > 0 ? parents.map(p => `<div><a href="#" class="text-blue-600 hover:underline view-details-link" data-person-id="${p.id}">${p.name}</a></div>`).join('') : 'None'}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-2 font-medium text-gray-700">Spouses:</td>
+                                <td class="px-4 py-2">
+                                    ${spouses.length > 0 ? spouses.map(s => `<div><a href="#" class="text-blue-600 hover:underline view-details-link" data-person-id="${s.id}">${s.name}</a></div>`).join('') : 'None'}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-2 font-medium text-gray-700">Children:</td>
+                                <td class="px-4 py-2">
+                                    ${children.length > 0 ? children.map(c => `<div><a href="#" class="text-blue-600 hover:underline view-details-link" data-person-id="${c.id}">${c.name}</a></div>`).join('') : 'None'}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 `;
 
                 this.ui.detailsModal.content.innerHTML = detailsHtml;
@@ -810,6 +846,19 @@
 
                 this.ui.detailsModal.container.classList.remove('hidden');
                 setTimeout(() => this.ui.detailsModal.container.style.opacity = 1, 10);
+
+                // Attach event listeners to the newly created links within the details modal
+                // This is the crucial part for event delegation
+                this.ui.detailsModal.content.addEventListener('click', (e) => {
+                    const link = e.target.closest('.view-details-link');
+                    if (link) {
+                        e.preventDefault(); // Prevent default link behavior
+                        e.stopPropagation(); // Prevent modal from closing if click bubbles
+                        const clickedPersonId = link.dataset.personId;
+                        this.closeDetailsModal(); // Close current modal
+                        this.showDetails(clickedPersonId); // Open new details modal
+                    }
+                });
             },
 
             closeDetailsModal() {
