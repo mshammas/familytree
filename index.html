@@ -549,9 +549,9 @@
 
                         if (person.indicator) { // It's a spouse
                             childNumberDataLabel = ''; // Hide label on mobile
-                            if (person.parentId) {
-                                indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">${person.indicator} <a href="#" data-parent-id="${person.parentId}" class="text-blue-500 hover:underline view-parents-link">${person.parentId}</a></span>`;
-                            } else {
+			if (person.parentId) {
+						indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">${person.indicator} <a href="#" data-parent-id="${person.parentId}" class="text-blue-500 hover:underline view-parents-link">view family</a></span>`;
+			    } else {
                                 indicatorHTML = `<span class="text-xs text-gray-400 italic ml-2">${person.indicator}</span>`;
                             }
                             // On mobile, this will be the only content in the childNumber cell
